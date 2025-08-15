@@ -1,54 +1,35 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Yana Scan — Rider & Battery Registration</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Yana Scan — Google Login + Firebase</title>
+<style>
+:root{
+  --bg:#000;
+  --action:#00eaff;
+  --muted:#bfc6c9;
+}
+body {background:var(--bg);color:var(--muted);margin:0;font-family:Arial;}
+.app {max-width:900px;margin:auto;padding:20px;}
+h1{color:white;}
+button {padding:10px 15px;border:none;border-radius:8px;cursor:pointer;}
+button.primary {background:var(--action);color:black;font-weight:bold;}
+.hidden{display:none;}
+#reader{margin-top:10px;border:1px solid var(--muted);}
+.log{margin-top:10px;font-size:14px;}
+.log-item{margin-bottom:6px;}
+</style>
+<!-- QR Scanner -->
+<script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+<script type="module">
+// ==== Firebase Imports ====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
-  <!-- Styling: black background, action color #00eaff -->
-  <style>
-    :root{
-      --bg:#000;
-      --action:#00eaff;
-      --muted: #bfc6c9;
-      --card: #0b0b0b;
-    }
-    html,body { height:100%; margin:0; background:var(--bg); color:var(--muted); font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-    .app { max-width:980px; margin:28px auto; padding:20px; }
-    header { display:flex; gap:16px; align-items:center; }
-    h1 { color: white; margin:0; font-size:20px; letter-spacing:0.2px; }
-    .controls { margin-top:18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    button { background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); padding:10px 12px; border-radius:10px; cursor:pointer; }
-    button.primary { background: linear-gradient(90deg,var(--action), #00d6e6); color:#001; border:none; font-weight:600; }
-    .panel { background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; margin-top:18px; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
-    #reader { width:100%; max-width:720px; height:auto; border-radius:8px; overflow:hidden; background:#111; }
-    .info { margin-top:12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    label { color:var(--muted); font-size:13px; }
-    input[type="email"], select { background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); padding:8px 10px; border-radius:8px; outline:none; }
-    .log { margin-top:12px; max-height:220px; overflow:auto; border-top:1px dashed rgba(255,255,255,0.03); padding-top:10px; font-size:13px; }
-    .log-item { padding:8px 6px; border-radius:6px; background: rgba(0,0,0,0.2); margin-bottom:8px; }
-    .muted { color: #7f8c8d; font-size:13px; }
-    .small { font-size:12px; color: #9aa6a8; }
-    .status { color:var(--action); font-weight:700; }
-    .row { display:flex; gap:8px; align-items:center; }
-    .flex { flex:1; }
-    .center { text-align:center; }
-    .hidden { display:none; }
-    footer { margin-top:18px; color:#6d7678; font-size:12px; }
-  </style>
-
-  <!-- QR scanner library -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
-  <!-- Firebase modular SDK (replace versions if you wish) -->
-  <script type="module">
-    // Firebase imports (modular v9) for browser
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-    import {
-      getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-
-    // ------------- Replace the firebaseConfig below with your project's config -------------
-    const firebaseConfig = {
+// ==== Firebase Config ====
+const firebaseConfig = {
   apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
   authDomain: "yana-qr.firebaseapp.com",
   projectId: "yana-qr",
@@ -56,412 +37,118 @@
   messagingSenderId: "905613005387",
   appId: "1:905613005387:web:b0d8464d826972654b73ce",
   measurementId: "G-9P9DLJGQHQ"
-    };
-    // Initialize Firebase app
-    const app = initializeApp(firebaseConfig);
-    // Initialize Firestore
-    const db = getFirestore(app);
+};
 
-    // Expose DB handles and helper functions to window for use in the non-module code below
-    window.__YANA_DB = { db, doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp };
+// ==== Init Firebase ====
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
 
-  </script>
+// ==== UI Elements ====
+const signInBtn = document.getElementById("googleSignIn");
+const signOutBtn = document.getElementById("signOut");
+const userInfo = document.getElementById("userInfo");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const logDiv = document.getElementById("log");
+let html5QrCode = null;
+let currentUserEmail = null;
+
+// ==== Auth Events ====
+signInBtn.addEventListener("click", () => {
+  signInWithPopup(auth, provider)
+    .then(result => {
+      console.log("Signed in:", result.user.email);
+    })
+    .catch(err => console.error(err));
+});
+
+signOutBtn.addEventListener("click", () => {
+  signOut(auth);
+});
+
+onAuthStateChanged(auth, user => {
+  if(user){
+    currentUserEmail = user.email;
+    userInfo.textContent = `Signed in as ${currentUserEmail}`;
+    signInBtn.classList.add("hidden");
+    signOutBtn.classList.remove("hidden");
+    startBtn.disabled = false;
+  } else {
+    currentUserEmail = null;
+    userInfo.textContent = "Not signed in";
+    signInBtn.classList.remove("hidden");
+    signOutBtn.classList.add("hidden");
+    startBtn.disabled = true;
+  }
+});
+
+// ==== QR Scanner ====
+startBtn.addEventListener("click", async () => {
+  if(!currentUserEmail){alert("Please sign in first!");return;}
+  if(!html5QrCode){
+    html5QrCode = new Html5Qrcode("reader");
+  }
+  html5QrCode.start({ facingMode: "environment" }, { fps:10, qrbox:250 },
+    onScanSuccess, err => {});
+});
+
+stopBtn.addEventListener("click", async () => {
+  if(html5QrCode){
+    await html5QrCode.stop();
+    html5QrCode.clear();
+    html5QrCode = null;
+  }
+});
+
+async function onScanSuccess(decodedText){
+  const [type, id] = decodedText.trim().split(":");
+  if(!type || !id){ addLog("Invalid QR"); return; }
+  await handleDeviceToggle(type.toLowerCase(), id, currentUserEmail);
+}
+
+function addLog(msg){
+  const div = document.createElement("div");
+  div.className="log-item";
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logDiv.prepend(div);
+}
+
+// ==== Firestore Device Logic ====
+async function handleDeviceToggle(type, id, email){
+  const deviceRef = doc(db, "devices", `${type}_${id}`);
+  const deviceSnap = await getDoc(deviceRef);
+  if(!deviceSnap.exists()){
+    await setDoc(deviceRef, {type,id,currentRiderEmail:email,lastUpdated:serverTimestamp()});
+    await addDoc(collection(db, "logs"), {action:"register",type,id,email,timestamp:serverTimestamp()});
+    addLog(`Registered ${type} ${id} to ${email}`);
+    return;
+  }
+  const data = deviceSnap.data();
+  if(data.currentRiderEmail === email){
+    await updateDoc(deviceRef, {currentRiderEmail:null,lastUpdated:serverTimestamp()});
+    await addDoc(collection(db, "logs"), {action:"deregister",type,id,email,timestamp:serverTimestamp()});
+    addLog(`Deregistered ${type} ${id} from ${email}`);
+  } else {
+    await updateDoc(deviceRef, {currentRiderEmail:email,lastUpdated:serverTimestamp()});
+    await addDoc(collection(db, "logs"), {action:"register",type,id,email,timestamp:serverTimestamp()});
+    addLog(`Registered ${type} ${id} to ${email}`);
+  }
+}
+</script>
 </head>
 <body>
-  <div class="app">
-    <header>
-      <h1>Yana Scan — Rider & Battery Registration</h1>
-      <div class="muted small">Black UI — Action color: <span class="status">#00eaff</span></div>
-    </header>
-
-    <div class="panel">
-      <div class="controls">
-        <div class="row">
-          <label for="cameraSelect" class="muted">Camera</label>
-          <select id="cameraSelect"></select>
-        </div>
-
-        <button id="startBtn" class="primary">Start Scanning</button>
-        <button id="stopBtn">Stop</button>
-
-        <div style="margin-left:auto" class="row">
-          <label class="muted">Rider email</label>
-          <input id="riderEmail" type="email" placeholder="rider@example.com" />
-          <label class="muted small"><input id="rememberEmail" type="checkbox" /> Remember</label>
-        </div>
-      </div>
-
-      <div id="reader" style="margin-top:12px;"></div>
-
-      <div class="info">
-        <div class="flex">
-          <div class="muted small">Last action:</div>
-          <div id="lastAction" class="small">No scans yet</div>
-        </div>
-        <div class="muted small">Tip: encode QR as <code>scooter:SC-1001</code> or <code>battery:BAT-1001</code></div>
-      </div>
-
-      <div class="log" id="log"></div>
-    </div>
-
-    <footer>
-      <div>Deploy: Use Firebase Hosting (run <code>firebase init hosting</code> then <code>firebase deploy</code>)</div>
-    </footer>
-  </div>
-
-  <!-- Main app logic (non-module, uses global Html5Qrcode and exposed firebase helpers) -->
-  <script>
-    // Grab elements
-    const cameraSelect = document.getElementById('cameraSelect');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const readerDiv = document.getElementById('reader');
-    const logDiv = document.getElementById('log');
-    const lastAction = document.getElementById('lastAction');
-    const riderEmailInput = document.getElementById('riderEmail');
-    const rememberEmail = document.getElementById('rememberEmail');
-
-    // Persist remembered email in localStorage
-    const STORAGE_KEY = 'yana_remembered_email';
-    const remembered = localStorage.getItem(STORAGE_KEY);
-    if (remembered) {
-      riderEmailInput.value = remembered;
-      rememberEmail.checked = true;
-    }
-
-    // Html5Qrcode scanner instance
-    let html5QrCode = null;
-    let currentCameraId = null;
-
-    // Helper: append to UI log
-    function uiLog(text) {
-      const it = document.createElement('div');
-      it.className = 'log-item';
-      it.textContent = `[${new Date().toLocaleString()}] ${text}`;
-      logDiv.prepend(it);
-    }
-
-    // Helper: show last action
-    function setLastAction(txt) {
-      lastAction.textContent = txt;
-    }
-
-    // Populate camera dropdown
-    Html5Qrcode.getCameras().then(cameras => {
-      // cameras is an array of {id, label}
-      if (cameras && cameras.length) {
-        cameras.forEach(cam => {
-          const opt = document.createElement('option');
-          opt.value = cam.id;
-          opt.textContent = cam.label || cam.id;
-          cameraSelect.appendChild(opt);
-        });
-        // default to the last camera (often back)
-        cameraSelect.selectedIndex = cameras.length - 1;
-        currentCameraId = cameraSelect.value;
-      } else {
-        const opt = document.createElement('option');
-        opt.textContent = 'No camera found';
-        cameraSelect.appendChild(opt);
-      }
-    }).catch(err => {
-      uiLog('Camera access error: ' + err);
-    });
-
-    // When user toggles camera select, remember choice
-    cameraSelect.addEventListener('change', () => {
-      currentCameraId = cameraSelect.value;
-    });
-
-    // Start scanning
-    startBtn.addEventListener('click', async () => {
-      // Remember rider email if checkbox checked
-      if (rememberEmail.checked && riderEmailInput.value) {
-        localStorage.setItem(STORAGE_KEY, riderEmailInput.value);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-
-      // Create scanner if not exists
-      if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader", { verbose: false });
-      }
-      // Start camera with selected camera
-      try {
-        await html5QrCode.start(
-          { deviceId: { exact: currentCameraId } },
-          {
-            fps: 10,    // scanning frames per second
-            qrbox: 300  // scanning box size
-          },
-          onScanSuccess,
-          onScanFailure
-        );
-        setLastAction('Scanner started');
-        uiLog('Scanner started');
-      } catch (e) {
-        uiLog('Failed to start scanner: ' + e);
-      }
-    });
-
-    // Stop scanning
-    stopBtn.addEventListener('click', async () => {
-      if (html5QrCode) {
-        await html5QrCode.stop();
-        html5QrCode.clear();
-        html5QrCode = null;
-        setLastAction('Scanner stopped');
-        uiLog('Scanner stopped');
-      }
-    });
-
-    // Called on each successful scan (decodedText is the QR content)
-    async function onScanSuccess(decodedText, decodedResult) {
-      // Avoid repeated immediate scans on same content by stopping scanner briefly
-      if (html5QrCode) {
-        await html5QrCode.pause(true); // pause to avoid duplicates
-      }
-
-      // Parse QR content expected format: type:id (e.g., scooter:SC-1001)
-      const raw = decodedText.trim();
-      const parts = raw.split(':');
-      if (parts.length !== 2) {
-        uiLog('Scanned invalid QR format: ' + raw);
-        setLastAction('Invalid QR scanned');
-        if (html5QrCode) await html5QrCode.resume();
-        return;
-      }
-      const type = parts[0].toLowerCase();
-      const id = parts[1];
-
-      // Validate type
-      if (!(type === 'scooter' || type === 'battery')) {
-        uiLog('Unknown device type scanned: ' + raw);
-        setLastAction('Unknown device type');
-        if (html5QrCode) await html5QrCode.resume();
-        return;
-      }
-
-      // Use rider email from input (if not provided, prompt)
-      let riderEmail = riderEmailInput.value && riderEmailInput.value.trim();
-      if (!riderEmail) {
-        // minimal prompt — user must enter an email to register/deregister
-        riderEmail = prompt('Enter rider email to register/deregister this device:');
-        if (!riderEmail) {
-          uiLog('No rider email provided. Ignoring scan.');
-          setLastAction('No email provided');
-          if (html5QrCode) await html5QrCode.resume();
-          return;
-        }
-        // set into input for convenience
-        riderEmailInput.value = riderEmail;
-        if (rememberEmail.checked) {
-          localStorage.setItem(STORAGE_KEY, riderEmail);
-        }
-      }
-
-      // Now handle register/deregister logic in Firestore
-      try {
-        await handleDeviceToggle(type, id, riderEmail);
-      } catch (err) {
-        console.error(err);
-        uiLog('Error processing scan: ' + err.message);
-        setLastAction('Error processing scan');
-      }
-
-      // resume scanner after short delay (so user sees result)
-      setTimeout(async () => {
-        if (html5QrCode) await html5QrCode.resume();
-      }, 1200);
-    }
-
-    // Called when a scan attempt fails (not an error), we ignore
-    function onScanFailure(error) {
-      // intentionally left minimal to avoid spam
-    }
-
-    // ---------- Database interaction ---------------
-    // This function registers or deregisters device in Firestore and logs the action.
-    async function handleDeviceToggle(type, id, riderEmail) {
-      // Get firebase helpers exposed earlier
-      const { db, doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } = window.__YANA_DB;
-
-      // Device document path: devices/{type}_{id}
-      const deviceDocId = `${type}_${id}`;
-      const deviceRef = doc(db, 'devices', deviceDocId);
-
-      // Read current device record
-      const deviceSnap = await getDoc(deviceRef);
-      const now = new Date();
-
-      if (!deviceSnap.exists()) {
-        // Device is new — register to rider
-        // Create device doc with currentRiderEmail
-        await setDoc(deviceRef, {
-          deviceId: id,
-          type: type,
-          currentRiderEmail: riderEmail,
-          createdAt: serverTimestamp(),
-          lastUpdated: serverTimestamp()
-        });
-        // Update user's record as well (append device)
-        const userRef = doc(db, 'users', riderEmail.toLowerCase());
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-          // create minimal user doc
-          await setDoc(userRef, {
-            email: riderEmail.toLowerCase(),
-            devices: [{ deviceDocId, attachedAt: serverTimestamp() }]
-          });
-        } else {
-          // append to devices array
-          const u = userSnap.data();
-          const devs = u.devices || [];
-          devs.push({ deviceDocId, attachedAt: serverTimestamp() });
-          await updateDoc(userRef, { devices: devs });
-        }
-        // create log entry
-        await addDoc(collection(db, 'logs'), {
-          action: 'register',
-          deviceDocId,
-          type,
-          deviceId: id,
-          riderEmail: riderEmail.toLowerCase(),
-          timestamp: serverTimestamp()
-        });
-        uiLog(`Registered ${type} ${id} -> ${riderEmail}`);
-        setLastAction(`Registered ${type} ${id} to ${riderEmail}`);
-        return;
-      }
-
-      // device exists — inspect currentRiderEmail
-      const deviceData = deviceSnap.data();
-      const currentRider = deviceData.currentRiderEmail || null;
-
-      if (!currentRider) {
-        // currently free — register to rider
-        await updateDoc(deviceRef, {
-          currentRiderEmail: riderEmail,
-          lastUpdated: serverTimestamp()
-        });
-        // add device to user doc
-        const userRef = doc(db, 'users', riderEmail.toLowerCase());
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            email: riderEmail.toLowerCase(),
-            devices: [{ deviceDocId, attachedAt: serverTimestamp() }]
-          });
-        } else {
-          const u = userSnap.data();
-          const devs = u.devices || [];
-          devs.push({ deviceDocId, attachedAt: serverTimestamp() });
-          await updateDoc(userRef, { devices: devs });
-        }
-        await addDoc(collection(db, 'logs'), {
-          action: 'register',
-          deviceDocId,
-          type,
-          deviceId: id,
-          riderEmail: riderEmail.toLowerCase(),
-          timestamp: serverTimestamp()
-        });
-        uiLog(`Registered ${type} ${id} -> ${riderEmail}`);
-        setLastAction(`Registered ${type} ${id} to ${riderEmail}`);
-        return;
-      }
-
-      // device is currently assigned to someone
-      if (currentRider.toLowerCase() === riderEmail.toLowerCase()) {
-        // same rider scanned -> treat as DEREGISTER
-        // remove currentRiderEmail from device
-        await updateDoc(deviceRef, {
-          currentRiderEmail: null,
-          lastUpdated: serverTimestamp()
-        });
-        // remove device from user's devices array if present
-        const userRef = doc(db, 'users', riderEmail.toLowerCase());
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const u = userSnap.data();
-          const devs = (u.devices || []).filter(d => d.deviceDocId !== deviceDocId);
-          await updateDoc(userRef, { devices: devs });
-        }
-        // log
-        await addDoc(collection(db, 'logs'), {
-          action: 'deregister',
-          deviceDocId,
-          type,
-          deviceId: id,
-          riderEmail: riderEmail.toLowerCase(),
-          timestamp: serverTimestamp()
-        });
-        uiLog(`Deregistered ${type} ${id} from ${riderEmail}`);
-        setLastAction(`Deregistered ${type} ${id} from ${riderEmail}`);
-        return;
-      } else {
-        // different rider scanned a device assigned to someone else
-        // require explicit confirmation to transfer/deregister
-        const confirmTransfer = confirm(`${type} ${id} is currently assigned to ${currentRider}. Do you want to transfer it to ${riderEmail}? Press OK to transfer (will deregister ${currentRider}).`);
-        if (!confirmTransfer) {
-          uiLog('User cancelled transfer/deregister.');
-          setLastAction('Transfer cancelled');
-          return;
-        }
-
-        // remove device from previous user's devices array
-        const prevUserRef = doc(db, 'users', currentRider.toLowerCase());
-        const prevUserSnap = await getDoc(prevUserRef);
-        if (prevUserSnap.exists()) {
-          const u = prevUserSnap.data();
-          const devs = (u.devices || []).filter(d => d.deviceDocId !== deviceDocId);
-          await updateDoc(prevUserRef, { devices: devs });
-        }
-
-        // attach to new rider
-        await updateDoc(deviceRef, {
-          currentRiderEmail: riderEmail.toLowerCase(),
-          lastUpdated: serverTimestamp()
-        });
-
-        // attach to new user's record
-        const newUserRef = doc(db, 'users', riderEmail.toLowerCase());
-        const newUserSnap = await getDoc(newUserRef);
-        if (!newUserSnap.exists()) {
-          await setDoc(newUserRef, {
-            email: riderEmail.toLowerCase(),
-            devices: [{ deviceDocId, attachedAt: serverTimestamp() }]
-          });
-        } else {
-          const u = newUserSnap.data();
-          const devs = u.devices || [];
-          devs.push({ deviceDocId, attachedAt: serverTimestamp() });
-          await updateDoc(newUserRef, { devices: devs });
-        }
-
-        // log transfer as deregister of old and register of new
-        await addDoc(collection(db, 'logs'), {
-          action: 'transfer',
-          deviceDocId,
-          type,
-          deviceId: id,
-          from: currentRider.toLowerCase(),
-          to: riderEmail.toLowerCase(),
-          timestamp: serverTimestamp()
-        });
-
-        uiLog(`Transferred ${type} ${id} from ${currentRider} -> ${riderEmail}`);
-        setLastAction(`Transferred ${type} ${id} to ${riderEmail}`);
-        return;
-      }
-    }
-
-    // optional: on window unload, stop scanner gracefully
-    window.addEventListener('beforeunload', async () => {
-      if (html5QrCode) {
-        try { await html5QrCode.stop(); } catch (e) {}
-      }
-    });
-  </script>
+<div class="app">
+  <h1>Yana Scan</h1>
+  <p id="userInfo">Not signed in</p>
+  <button id="googleSignIn" class="primary">Sign in with Google</button>
+  <button id="signOut" class="hidden">Sign Out</button>
+  <br><br>
+  <button id="startBtn" class="primary" disabled>Start Scanning</button>
+  <button id="stopBtn">Stop</button>
+  <div id="reader"></div>
+  <div class="log" id="log"></div>
+</div>
 </body>
 </html>
