@@ -1,292 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yana • QR Asset Tracker (MVP)</title>
-  <link rel="manifest" href="manifest.json" />
-  <style>
-    :root{--bg:#0f172a;--card:#111827;--ink:#e5e7eb;--muted:#9ca3af;--accent:#22c55e;--danger:#ef4444}
-    *{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;background:linear-gradient(180deg,#0b1020,#0f172a);color:var(--ink)}
-    header{padding:16px 20px;display:flex;gap:12px;align-items:center;border-bottom:1px solid #1f2937;position:sticky;top:0;background:#0f172acc;backdrop-filter:blur(6px)}
-    h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
-    main{max-width:860px;margin:20px auto;padding:0 16px}
-    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-    .row{display:grid;grid-template-columns:1fr;gap:16px}
-    @media(min-width:720px){.row{grid-template-columns:1fr 1fr}}
-    .section{padding:16px}
-    label{font-size:12px;color:var(--muted)}
-    input,button{width:100%;padding:12px 14px;border-radius:12px;border:1px solid #374151;background:#0b1220;color:var(--ink)}
-    button{cursor:pointer;border:1px solid #334155}
-    .primary{background:var(--accent);color:#04110b;border:none;font-weight:700}
-    .danger{background:var(--danger);color:white;border:none}
-    .muted{background:#111827}
-    .stack{display:flex;gap:10px;flex-wrap:wrap}
-    .pill{padding:6px 10px;border-radius:999px;border:1px solid #334155;background:#0b1220;color:var(--muted);font-size:12px}
-    #reader{width:100%;min-height:280px;border-radius:12px;overflow:hidden;border:1px dashed #334155}
-    .log{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b1220;border-radius:12px;padding:12px;max-height:220px;overflow:auto;border:1px solid #1f2937}
-    .ok{color:#86efac}.warn{color:#fde047}.err{color:#fca5a5}
-    .badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid #334155;color:#cbd5e1}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YANA QR App</title>
+
+<!-- Manifest only when allowed -->
+<script>
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  const manifest = document.createElement('link');
+  manifest.rel = 'manifest';
+  manifest.href = 'manifest.json';
+  document.head.appendChild(manifest);
+} else {
+  console.warn("Skipping manifest.json in file:// mode");
+}
+</script>
+
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; }
+#log { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; margin-top: 10px; }
+input, button { margin: 5px 0; padding: 8px; }
+video { width: 100%; max-width: 400px; margin-top: 10px; }
+</style>
 </head>
 <body>
-  <header>
-    <h1>Yana QR Asset Tracker</h1>
-    <span class="pill" id="envTag">MVP</span>
-    <span class="pill" id="userBadge">Not signed in</span>
-  </header>
 
-  <main>
-    <!-- Auth Card -->
-    <section class="card section">
-      <h2 style="margin:0 0 6px 0; font-size:16px">Sign in (Email & Password)</h2>
-      <p style="margin:0 0 12px 0; color:var(--muted); font-size:13px">Links assets (scooters & batteries) to your rider account and logs every scan.</p>
-      <div class="row">
-        <div>
-          <label>Email</label>
-          <input id="email" type="email" placeholder="rider@yana.com" />
-        </div>
-        <div>
-          <label>Password</label>
-          <input id="password" type="password" placeholder="••••••••" />
-        </div>
-      </div>
-      <div class="stack" style="margin-top:12px">
-        <button class="primary" id="btnSignIn">Sign In</button>
-        <button class="muted" id="btnRegister">Create Account</button>
-        <button class="danger" id="btnSignOut">Sign Out</button>
-      </div>
-    </section>
+<h2>YANA QR App</h2>
 
-    <!-- Scanner + Status -->
-    <section class="card section" style="margin-top:16px">
-      <div class="row">
-        <div>
-          <h3 style="margin:0 0 10px 0;font-size:16px">Scan QR</h3>
-          <div id="reader"></div>
-          <div class="stack" style="margin-top:10px">
-            <button id="btnStart" class="primary">Start Camera</button>
-            <button id="btnStop" class="muted">Stop Camera</button>
-          </div>
-        </div>
-        <div>
-          <h3 style="margin:0 0 10px 0;font-size:16px">Asset Status</h3>
-          <div class="log" id="status"></div>
-          <div style="margin-top:12px">
-            <span class="badge">Rule: scan to register · rescan to deregister</span>
-          </div>
-        </div>
-      </div>
-    </section>
+<input type="email" id="email" placeholder="Email"><br>
+<input type="password" id="password" placeholder="Password"><br>
+<button id="btnRegister">Register</button>
+<button id="btnSignIn">Sign In</button>
+<button id="btnSignOut">Sign Out</button>
 
-    <!-- Activity Log (client-side stream) -->
-    <section class="card section" style="margin-top:16px">
-      <h3 style="margin:0 0 10px 0;font-size:16px">Recent Activity (this device)</h3>
-      <div class="log" id="feed"></div>
-    </section>
-  </main>
+<h3>QR Scanner</h3>
+<video id="preview"></video>
+<button id="btnScan">Start Scan</button>
 
-  <!-- html5-qrcode -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
+<div id="log"></div>
 
-  <!-- Firebase SDKs v9+ (modular) -->
-  <script type="module">
-    // ====== 1) CONFIGURE FIREBASE (replace with your project values) ======
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
-      authDomain: "yana-qr.firebaseapp.com",
-      projectId: "yana-qr",
-      storageBucket: "yana-qr.firebasestorage.app",
-      messagingSenderId: "905613005387",
-      appId: "1:905613005387:web:b0d8464d826972654b73ce"
-      
-    };
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+<!-- QR Scanner -->
+<script src="https://unpkg.com/html5-qrcode"></script>
 
-    // ====== 2) UI HELPERS ======
-    const q = (sel)=>document.querySelector(sel);
-    const status = q('#status');
-    const feed = q('#feed');
-    const userBadge = q('#userBadge');
-    const log = (msg, cls='')=>{ const p=document.createElement('div'); p.innerHTML = msg; if(cls) p.className=cls; feed.prepend(p); }
-    const show = (el,html)=>{ el.innerHTML = html; }
+<script>
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+  authDomain: "yana-qr.firebaseapp.com",
+  projectId: "yana-qr",
+  storageBucket: "yana-qr.firebasestorage.app",
+  messagingSenderId: "905613005387",
+  appId: "1:905613005387:web:b0d8464d826972654b73ce",
+  measurementId: "G-9P9DLJGQHQ"
+};
 
-    // ====== 3) AUTH ======
-q('#btnRegister').onclick = async ()=>{
-  const email = q('#email').value.trim();
-  const pass = q('#password').value;
-  console.log("[DEBUG] Register clicked:", {email});
+let auth, db, currentUser;
+
+// Init Firebase only for http/https
+if (location.protocol === 'http:' || location.protocol === 'https:') {
+  const app = firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+} else {
+  console.warn("Firebase init skipped in file:// mode");
+}
+
+function log(msg, type='info') {
+  const logBox = document.getElementById('log');
+  const div = document.createElement('div');
+  div.innerHTML = msg;
+  div.style.color = type === 'err' ? 'red' : (type === 'ok' ? 'green' : 'black');
+  logBox.appendChild(div);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// Register
+document.getElementById('btnRegister').onclick = async () => {
   try {
-    const userCred = await createUserWithEmailAndPassword(auth, email, pass);
-    console.log("[DEBUG] Account created:", userCred.user.email);
-    log(`✅ Account created for <b>${userCred.user.email}</b>`,'ok');
-  } catch(e) {
-    console.error("[DEBUG] Registration failed:", e);
-    log(`❌ ${e.code}: ${e.message}`,'err');
+    const email = emailInput.value.trim();
+    const pass = passwordInput.value;
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    currentUser = cred.user;
+    log(`✅ Registered: ${currentUser.email}`, 'ok');
+  } catch (e) {
+    log(`❌ ${e.message}`, 'err');
   }
 };
 
-   q('#btnSignIn').onclick = async ()=>{
-  const email = q('#email').value.trim();
-  const pass = q('#password').value;
-  console.log("[DEBUG] Sign-in clicked:", {email});
+// Sign In
+document.getElementById('btnSignIn').onclick = async () => {
   try {
-    const userCred = await signInWithEmailAndPassword(auth, email, pass);
-    console.log("[DEBUG] Signed in:", userCred.user.email);
-    log(`🔐 Signed in as <b>${userCred.user.email}</b>`,'ok');
-  } catch(e) {
-    console.error("[DEBUG] Sign-in failed:", e);
-    log(`❌ ${e.code}: ${e.message}`,'err');
+    const email = emailInput.value.trim();
+    const pass = passwordInput.value;
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    currentUser = cred.user;
+    log(`🔐 Signed in as ${currentUser.email}`, 'ok');
+  } catch (e) {
+    log(`❌ ${e.message}`, 'err');
   }
 };
 
-    q('#btnSignOut').onclick = ()=> signOut(auth);
+// Sign Out
+document.getElementById('btnSignOut').onclick = async () => {
+  await auth.signOut();
+  currentUser = null;
+  log("🚪 Signed out", 'ok');
+};
 
-    let currentUser = null;
-    onAuthStateChanged(auth, async (u)=>{
-      currentUser = u;
-      if(u){
-        userBadge.textContent = `Rider: ${u.email}`;
-        // ensure rider doc exists
-        await setDoc(doc(db,'riders',u.uid),{ email:u.email, updated_at: serverTimestamp() },{ merge:true });
-      } else {
-        userBadge.textContent = 'Not signed in';
-      }
+// QR Scan
+document.getElementById('btnScan').onclick = () => {
+  if (!currentUser) return log("Sign in first!", 'err');
+
+  const html5QrCode = new Html5Qrcode("preview");
+  Html5Qrcode.getCameras().then(cameras => {
+    if (cameras && cameras.length) {
+      html5QrCode.start(
+        cameras[0].id,
+        { fps: 10, qrbox: 250 },
+        async qrCodeMessage => {
+          log(`📷 Scanned: ${qrCodeMessage}`, 'ok');
+          await handleScan(qrCodeMessage);
+          html5QrCode.stop();
+        },
+        error => {}
+      );
+    }
+  }).catch(err => log(err, 'err'));
+};
+
+// Handle scan (register/deregister)
+async function handleScan(code) {
+  const docRef = db.collection("registrations").doc(code);
+  const docSnap = await docRef.get();
+
+  if (!docSnap.exists) {
+    // Register
+    await docRef.set({
+      type: code.toLowerCase().includes("battery") ? "battery" : "scooter",
+      assignedTo: currentUser.email,
+      timestamp: new Date(),
+      action: "registered"
     });
+    log(`✅ Registered ${code} to ${currentUser.email}`, 'ok');
+  } else {
+    // Deregister
+    await docRef.delete();
+    log(`🗑️ Deregistered ${code}`, 'ok');
 
-    // ====== 4) QR SCAN HANDLER ======
-    // QR formats supported:
-    //   scooter:SCOOTER_ID
-    //   battery:BATTERY_ID
-    //   or plain IDs with prefix in metadata query (?t=scooter)
-    function parseAsset(text){
-      try{
-        const url = new URL(text);
-        const t = url.searchParams.get('t');
-        if(t && (t==='scooter' || t==='battery')) return { type:t, id:url.pathname.replace(/^\//,'') || url.searchParams.get('id') };
-      }catch(_){ /* not a URL */ }
-      const m = /^(scooter|battery)[:\/-]([A-Za-z0-9_-]+)$/.exec(text.trim());
-      if(m) return { type:m[1], id:m[2] };
-      return null;
-    }
-
-    async function ensureAssetDoc(assetId, type){
-      const ref = doc(db,'assets',assetId);
-      const snap = await getDoc(ref);
-      if(!snap.exists()){
-        await setDoc(ref,{ type, status:'available', assigned_to:null, updated_at: serverTimestamp() });
-      }
-      return ref;
-    }
-
-    async function logEvent({asset_id, asset_type, rider_id, action, location}){
-      await addDoc(collection(db,'logs'),{
-        timestamp: serverTimestamp(), asset_id, asset_type, rider_id, action, location: location || null
-      });
-    }
-
-    async function toggleAssignment(asset){
-      if(!currentUser){ log('Please sign in first.','warn'); return; }
-      if(!asset){ log('Invalid QR. Expected "scooter:ID" or "battery:ID".','err'); return; }
-
-      // optional location
-      let location=null;
-      if(navigator.geolocation){
-        try{ await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(p=>{location={lat:p.coords.latitude,lng:p.coords.longitude};res();},()=>res(),{enableHighAccuracy:true,timeout:2000})); }catch(_){/*noop*/}
-      }
-
-      const ref = await ensureAssetDoc(asset.id, asset.type);
-      const snap = await getDoc(ref);
-      const data = snap.data();
-
-      if(data.assigned_to === currentUser.uid){
-        // deregister
-        await updateDoc(ref,{ status:'available', assigned_to:null, updated_at: serverTimestamp() });
-        await logEvent({ asset_id: asset.id, asset_type: asset.type, rider_id: currentUser.uid, action:'deregister', location });
-        show(status, `🔓 Deregistered <b>${asset.type.toUpperCase()}</b> <code>${asset.id}</code> from you.`);
-        log(`🔓 ${asset.type} ${asset.id} → deregistered`,'ok');
-      } else if(!data.assigned_to){
-        // register
-        await updateDoc(ref,{ status:'assigned', assigned_to: currentUser.uid, updated_at: serverTimestamp() });
-        await logEvent({ asset_id: asset.id, asset_type: asset.type, rider_id: currentUser.uid, action:'register', location });
-        show(status, `🔒 Registered <b>${asset.type.toUpperCase()}</b> <code>${asset.id}</code> to you.`);
-        log(`🔒 ${asset.type} ${asset.id} → registered`,'ok');
-      } else {
-        // assigned to someone else
-        show(status, `⛔ Already assigned to another rider.`);
-        log(`⛔ ${asset.type} ${asset.id} is with another rider`,'err');
-      }
-    }
-
-    // ====== 5) Start/Stop Camera & Scan ======
-    let html5Qrcode = null;
-    let isRunning = false;
-
-    async function startScanner(){
-      if(isRunning) return;
-      const elId = 'reader';
-      html5Qrcode = new Html5Qrcode(elId);
-      const config = { fps: 10, qrbox: { width: 240, height: 240 } };
-      try{
-        await html5Qrcode.start({ facingMode: "environment" }, config, (decodedText)=>{
-          const asset = parseAsset(decodedText);
-          toggleAssignment(asset);
-        });
-        isRunning = true;
-        log('📷 Scanner started','ok');
-      }catch(e){ log('❌ Camera error: '+e, 'err'); }
-    }
-    async function stopScanner(){
-      if(html5Qrcode && isRunning){
-        await html5Qrcode.stop();
-        await html5Qrcode.clear();
-        isRunning = false;
-        log('🛑 Scanner stopped','warn');
-      }
-    }
-
-    q('#btnStart').onclick = startScanner;
-    q('#btnStop').onclick = stopScanner;
-
-    // Cleanup on page hide
-    document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopScanner(); });
-  </script>
-
-  <!--
-  ================= FIRESTORE SECURITY RULES (paste in Firebase Console > Firestore > Rules) =================
-  rules_version = '2';
-  service cloud.firestore {
-    match /databases/{database}/documents {
-      function signedIn() { return request.auth != null; }
-      match /riders/{uid} {
-        allow read: if signedIn();
-        allow write: if request.auth.uid == uid; // riders can update their own profile
-      }
-      match /assets/{assetId} {
-        allow read: if signedIn();
-        allow update, create: if signedIn(); // allow app to create/flip assignment
-        allow delete: if false; // prevent deletes from client
-      }
-      match /logs/{logId} {
-        allow create: if signedIn();
-        allow read: if signedIn();
-        allow update, delete: if false; // logs are append-only
-      }
-    }
+    // Log history
+    await db.collection("logs").add({
+      code,
+      action: "deregistered",
+      by: currentUser.email,
+      timestamp: new Date()
+    });
   }
-  ================================================================================================
+}
+</script>
 
-  ================= QR ENCODING FORMAT =================
-  Preferred: "scooter:SCTR123" or "battery:BAT456"
-  Also supported: "https://qr.yanaride.com/SCTR123?t=scooter" or "https://qr.yanaride.com/BAT456?t=battery"
-  ================================================================================================
-
-  -->
 </body>
 </html>
