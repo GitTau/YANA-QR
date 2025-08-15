@@ -2,166 +2,415 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YANA QR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yana • Rider-Asset Linker</title>
+  <!-- Colors: black bg, action: #00eaff (neon blue), highlight: same family -->
   <style>
+    :root {
+      --bg: #000000;
+      --text: #e6f7ff;
+      --muted: #86a8b3;
+      --action: #00eaff; /* action color */
+      --highlight: #00eaff; /* neon blue highlight */
+      --card: #0b0f12;
+      --border: #0a2a33;
+      --good: #00ffaa;
+      --bad: #ff3b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
-      font-family: Arial, sans-serif;
-      background-color: #000;
-      color: white;
-      text-align: center;
       margin: 0;
-      padding: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px;
     }
     header {
-      background-color: #FFD700;
-      padding: 15px;
-      font-size: 1.5em;
-      font-weight: bold;
-      color: black;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
     }
-    .container {
-      max-width: 400px;
-      margin: auto;
-      padding: 20px;
+    .brand {
+      display: flex; align-items: center; gap: 12px;
     }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin: 8px 0;
-      border: none;
-      border-radius: 5px;
-      font-size: 1em;
+    .brand .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: radial-gradient(120% 120% at 0% 0%, var(--highlight), transparent 60%), #00161c;
+      box-shadow: 0 0 18px 2px rgba(0,234,255,0.35), inset 0 0 12px rgba(0,234,255,0.15);
+      border: 1px solid var(--border);
     }
-    input {
-      background: white;
-      color: black;
-    }
-    button {
-      background-color: #FFD700;
-      color: black;
-      font-weight: bold;
+    .brand h1 { font-size: 18px; margin: 0; letter-spacing: 0.3px; }
+
+    .btn {
+      background: linear-gradient(180deg, rgba(0,234,255,0.25), rgba(0,234,255,0.05));
+      color: var(--text);
+      border: 1px solid var(--highlight);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 600;
       cursor: pointer;
+      transition: transform .06s ease, box-shadow .15s ease;
+      box-shadow: 0 0 0 0 rgba(0,234,255,0.0);
     }
-    button:hover {
-      opacity: 0.9;
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,234,255,0.18); }
+    .btn.secondary { border-color: var(--border); background: #0a1216; color: var(--muted); }
+
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 900px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
+
+    .card {
+      background: linear-gradient(180deg, rgba(0,234,255,0.03), rgba(0,234,255,0.00));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: inset 0 0 24px rgba(0,234,255,0.06);
     }
-    #reader {
+
+    .label { color: var(--muted); font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; }
+    .value { font-weight: 700; }
+
+    #scanner { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .pill { border:1px solid var(--border); border-radius:999px; padding: 2px 10px; font-size:12px; color: var(--muted) }
+
+    .status { font-size: 14px; }
+    .status.good { color: var(--good); }
+    .status.bad { color: var(--bad); }
+
+    a.inline { color: var(--highlight); text-decoration: none; border-bottom: 1px dashed var(--highlight); }
+
+    .small { font-size: 12px; color: var(--muted); }
+    .hr { height: 1px; background: var(--border); margin: 12px 0; }
+
+    input[type="text"] {
       width: 100%;
-      margin-top: 20px;
-    }
-    .result {
-      margin-top: 15px;
-      padding: 10px;
-      background: #111;
-      border-radius: 5px;
-      word-break: break-word;
-    }
-    a {
-      color: #FFD700;
-      text-decoration: underline;
+      background: #061117;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      outline: none;
     }
   </style>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
-  <header>YANA QR</header>
-  <div class="container">
-    <input type="email" id="email" placeholder="Enter Email" />
-    <input type="password" id="password" placeholder="Enter Password" />
-    <button id="signin">Sign In</button>
-    <button id="signout" style="display:none;">Sign Out</button>
-    <button id="start-scan" style="display:none;">Start Scan</button>
-    <div id="reader" style="display:none;"></div>
-    <div id="result" class="result"></div>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <h1>Yana • Rider ↔ Asset Linker</h1>
+          <div class="small">Scan to <span class="mono">register</span> or <span class="mono">deregister</span> scooters & batteries</div>
+        </div>
+      </div>
+      <div class="row">
+        <button id="btnSignIn" class="btn">Sign in with Google</button>
+        <button id="btnSignOut" class="btn secondary" style="display:none">Sign out</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: Scanner & Controls -->
+      <section class="card">
+        <div class="row" style="justify-content: space-between; align-items: flex-end;">
+          <div>
+            <div class="label">Signed in as</div>
+            <div class="value" id="userEmail">—</div>
+          </div>
+          <div class="row">
+            <span class="pill" id="riderId">rider: —</span>
+            <span class="pill">action color: <span class="mono" style="color:var(--highlight)">#00eaff</span></span>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="row" style="gap:6px; align-items:center;">
+          <div class="label">QR content format</div>
+          <div class="small">Use <span class="mono">scooter:ABC123</span> or <span class="mono">battery:BAT42</span>. A scan by the signed-in rider toggles ownership: if free → registers to you; if already yours → deregisters; if attached to another rider → blocked.</div>
+        </div>
+
+        <div id="scanner" style="margin-top:12px"></div>
+        <div class="row" style="margin-top:10px; gap:8px;">
+          <button id="btnStart" class="btn">Start camera</button>
+          <button id="btnStop" class="btn secondary">Stop</button>
+          <button id="btnSimulateScooter" class="btn secondary">Simulate scooter scan</button>
+          <button id="btnSimulateBattery" class="btn secondary">Simulate battery scan</button>
+        </div>
+
+        <div class="hr"></div>
+        <div>
+          <div class="label">Last scan</div>
+          <div id="lastScan" class="mono small">—</div>
+          <div id="actionMsg" class="status">—</div>
+        </div>
+      </section>
+
+      <!-- RIGHT: My Links & Activity -->
+      <aside class="card">
+        <div class="label">Your current attachments</div>
+        <div class="row">
+          <div>
+            <div class="small">Scooter</div>
+            <div class="value mono" id="myScooter">—</div>
+          </div>
+          <div style="flex:1"></div>
+          <div>
+            <div class="small">Battery</div>
+            <div class="value mono" id="myBattery">—</div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="label">Recent actions (this session)</div>
+        <ul id="activity" class="small"></ul>
+        <div class="hr"></div>
+        <div class="small">All scans, registrations, and deregistrations are saved in Firestore under <span class="mono">logs</span> with timestamps. Assets live in <span class="mono">scooters</span> and <span class="mono">batteries</span>, rider profiles in <span class="mono">riders</span>.</div>
+      </aside>
+    </div>
   </div>
 
-  <script>
-    // Firebase config
+  <!-- QR Scanner lib (no bundler needed) -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <!-- Firebase (ESM via CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, collection, addDoc, serverTimestamp, runTransaction, query, where, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // 1) Replace with your Firebase project keys
     const firebaseConfig = {
-      apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
-      authDomain: "yana-qr.firebaseapp.com",
-      projectId: "yana-qr",
-      storageBucket: "yana-qr.firebasestorage.app",
-      messagingSenderId: "905613005387",
-      appId: "1:905613005387:web:b0d8464d826972654b73ce",
-      measurementId: "G-9P9DLJGQHQ"
+  apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+  authDomain: "yana-qr.firebaseapp.com",
+  projectId: "yana-qr",
+  storageBucket: "yana-qr.firebasestorage.app",
+  messagingSenderId: "905613005387",
+  appId: "1:905613005387:web:b0d8464d826972654b73ce",
+  measurementId: "G-9P9DLJGQHQ"
     };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
 
-    const signinBtn = document.getElementById('signin');
-    const signoutBtn = document.getElementById('signout');
-    const startScanBtn = document.getElementById('start-scan');
-    const readerDiv = document.getElementById('reader');
-    const resultDiv = document.getElementById('result');
+    // Init
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-    // Auto-register if login fails
-    signinBtn.addEventListener('click', async () => {
-      const email = document.getElementById('email').value;
-      const pass = document.getElementById('password').value;
+    // UI refs
+    const el = (id) => document.getElementById(id);
+    const userEmail = el('userEmail');
+    const riderIdEl = el('riderId');
+    const lastScan = el('lastScan');
+    const actionMsg = el('actionMsg');
+    const myScooter = el('myScooter');
+    const myBattery = el('myBattery');
+    const activity = el('activity');
+
+    const btnSignIn = el('btnSignIn');
+    const btnSignOut = el('btnSignOut');
+    const btnStart = el('btnStart');
+    const btnStop = el('btnStop');
+    const btnSimulateScooter = el('btnSimulateScooter');
+    const btnSimulateBattery = el('btnSimulateBattery');
+
+    // Auth UI
+    btnSignIn.onclick = async () => {
       try {
-        await auth.signInWithEmailAndPassword(email, pass);
-      } catch (err) {
-        if (err.code === 'auth/invalid-login-credentials' || err.code === 'auth/user-not-found') {
-          await auth.createUserWithEmailAndPassword(email, pass);
-        } else {
-          alert(err.message);
-        }
-      }
-    });
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (e) { toastBad(e.message); }
+    };
+    btnSignOut.onclick = () => signOut(auth);
 
-    // Sign out
-    signoutBtn.addEventListener('click', async () => {
-      await auth.signOut();
-    });
-
-    // Auth state listener
-    auth.onAuthStateChanged(user => {
+    let currentUser = null;
+    onAuthStateChanged(auth, async (user) => {
+      currentUser = user;
       if (user) {
-        signinBtn.style.display = 'none';
-        signoutBtn.style.display = 'block';
-        startScanBtn.style.display = 'block';
+        userEmail.textContent = user.email || user.uid;
+        riderIdEl.textContent = `rider: ${user.uid.slice(0,6)}`;
+        btnSignIn.style.display = 'none';
+        btnSignOut.style.display = '';
+        await ensureRiderProfile(user);
+        await refreshMyAttachments(user.uid);
       } else {
-        signinBtn.style.display = 'block';
-        signoutBtn.style.display = 'none';
-        startScanBtn.style.display = 'none';
-        readerDiv.style.display = 'none';
+        userEmail.textContent = '—';
+        riderIdEl.textContent = 'rider: —';
+        btnSignIn.style.display = '';
+        btnSignOut.style.display = 'none';
+        myScooter.textContent = '—';
+        myBattery.textContent = '—';
       }
     });
 
-    // Start QR scanning
-    startScanBtn.addEventListener('click', () => {
-      readerDiv.style.display = 'block';
-      const html5QrCode = new Html5Qrcode("reader");
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        async (decodedText) => {
-          html5QrCode.stop();
-          let displayText = decodedText;
-          if (decodedText.startsWith("http://") || decodedText.startsWith("https://")) {
-            displayText = `<a href="${decodedText}" target="_blank">${decodedText}</a>`;
-          }
-          resultDiv.innerHTML = "Scanned: " + displayText;
+    async function ensureRiderProfile(user) {
+      const rRef = doc(db, 'riders', user.uid);
+      const snap = await getDoc(rRef);
+      if (!snap.exists()) {
+        await setDoc(rRef, {
+          email: user.email || null,
+          displayName: user.displayName || null,
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
 
-          // Save to Firestore
-          const user = auth.currentUser;
-          if (user) {
-            await db.collection("scans").add({
-              uid: user.uid,
-              email: user.email,
-              data: decodedText,
-              timestamp: firebase.firestore.FieldValue.serverTimestamp()
-            });
-          }
+    async function refreshMyAttachments(uid) {
+      // Lookup any scooter/battery linked to this rider
+      const sQ = query(collection(db, 'scooters'), where('currentRider', '==', uid));
+      const bQ = query(collection(db, 'batteries'), where('currentRider', '==', uid));
+      const [sRes, bRes] = await Promise.all([getDocs(sQ), getDocs(bQ)]);
+      myScooter.textContent = sRes.empty ? '—' : sRes.docs[0].id;
+      myBattery.textContent = bRes.empty ? '—' : bRes.docs[0].id;
+    }
+
+    // Scanner setup
+    let scanner = null;
+    let scanning = false;
+
+    async function startScanner() {
+      if (scanning) return;
+      const containerId = 'scanner';
+      const config = { fps: 10, qrbox: 240, rememberLastUsedCamera: true, aspectRatio: 1.0 };
+      scanner = new Html5Qrcode(containerId);
+      const cameras = await Html5Qrcode.getCameras();
+      const cameraId = cameras?.[0]?.id;
+      if (!cameraId) throw new Error('No camera found');
+      await scanner.start(
+        cameraId,
+        config,
+        async (decodedText) => {
+          await handleScan(decodedText);
+        },
+        (err) => { /* ignore frame errors */ }
+      );
+      scanning = true;
+      toastInfo('Scanner running…');
+    }
+
+    async function stopScanner() {
+      if (!scanner) return;
+      await scanner.stop();
+      await scanner.clear();
+      scanning = false;
+      toastInfo('Scanner stopped');
+    }
+
+    btnStart.onclick = () => startScanner().catch(e => toastBad(e.message));
+    btnStop.onclick = () => stopScanner();
+
+    btnSimulateScooter.onclick = () => handleScan('scooter:DEMO123');
+    btnSimulateBattery.onclick = () => handleScan('battery:PACK42');
+
+    function parseQR(text) {
+      const t = String(text || '').trim();
+      const m = /^(scooter|battery)\s*:\s*([A-Za-z0-9_-]{2,64})$/i.exec(t);
+      if (!m) return null;
+      return { type: m[1].toLowerCase(), id: m[2] };
+    }
+
+    async function handleScan(raw) {
+      lastScan.textContent = raw;
+      appendActivity(`scan: ${raw}`);
+      await logEvent({ kind: 'scan', raw });
+      if (!currentUser) { toastBad('Sign in first.'); return; }
+      const parsed = parseQR(raw);
+      if (!parsed) { toastBad('Invalid QR. Use scooter:ID or battery:ID'); return; }
+      const { type, id } = parsed;
+      try {
+        const result = await toggleAssignment(type, id, currentUser.uid);
+        if (result.action === 'registered') {
+          toastGood(`${type} ${id} registered to you`);
+          actionMsg.className = 'status good';
+          actionMsg.textContent = `✔ Registered ${type} ${id} to you.`;
+        } else if (result.action === 'deregistered') {
+          toastInfo(`${type} ${id} deregistered from you`);
+          actionMsg.className = 'status';
+          actionMsg.textContent = `↔ Deregistered ${type} ${id} from you.`;
+        } else if (result.action === 'blocked') {
+          toastBad(`${type} ${id} is attached to another rider`);
+          actionMsg.className = 'status bad';
+          actionMsg.textContent = `⛔ Attached to another rider.`;
         }
-      ).catch(err => alert("Camera Error: " + err));
-    });
+        await refreshMyAttachments(currentUser.uid);
+      } catch (e) {
+        toastBad(e.message);
+      }
+    }
+
+    async function toggleAssignment(assetType, assetId, riderUid) {
+      const coll = assetType === 'scooter' ? 'scooters' : 'batteries';
+      const aRef = doc(db, coll, assetId);
+
+      return await runTransaction(db, async (tx) => {
+        const snap = await tx.get(aRef);
+        const exists = snap.exists();
+        const data = exists ? snap.data() : {};
+        const cur = data.currentRider || null;
+
+        // Case 1: Unassigned → register to me
+        if (!cur) {
+          if (!exists) {
+            tx.set(aRef, { currentRider: riderUid, updatedAt: serverTimestamp(), createdAt: serverTimestamp() });
+          } else {
+            tx.update(aRef, { currentRider: riderUid, updatedAt: serverTimestamp() });
+          }
+          await addLogTx(tx, { kind: 'register', assetType, assetId, to: riderUid });
+          return { action: 'registered' };
+        }
+
+        // Case 2: Assigned to me → deregister
+        if (cur === riderUid) {
+          tx.update(aRef, { currentRider: null, updatedAt: serverTimestamp() });
+          await addLogTx(tx, { kind: 'deregister', assetType, assetId, from: riderUid });
+          return { action: 'deregistered' };
+        }
+
+        // Case 3: Assigned to someone else → block
+        await addLogTx(tx, { kind: 'blocked', assetType, assetId, owner: cur, attemptedBy: riderUid });
+        return { action: 'blocked' };
+      });
+    }
+
+    async function addLogTx(tx, payload) {
+      const logRef = doc(collection(db, 'logs'));
+      tx.set(logRef, { ...payload, ts: serverTimestamp(), rider: currentUser ? currentUser.uid : null, email: currentUser?.email || null });
+    }
+
+    async function logEvent(payload) {
+      try {
+        await addDoc(collection(db, 'logs'), { ...payload, ts: serverTimestamp(), rider: currentUser ? currentUser.uid : null, email: currentUser?.email || null });
+      } catch (_) {}
+    }
+
+    function appendActivity(line) {
+      const li = document.createElement('li');
+      li.textContent = new Date().toLocaleTimeString() + ' — ' + line;
+      activity.prepend(li);
+      const max = 20; while (activity.children.length > max) activity.removeChild(activity.lastChild);
+    }
+
+    // Tiny toasts inline
+    function toast(msg, cls) {
+      actionMsg.className = `status ${cls||''}`.trim();
+      actionMsg.textContent = msg;
+    }
+    function toastGood(m){ toast(m, 'good'); }
+    function toastBad(m){ toast(m, 'bad'); }
+    function toastInfo(m){ toast(m, ''); }
+
+    // Expose a helper to quickly pre-create QR strings (optional)
+    window._yanaMakeQRString = (kind, id) => `${kind}:${id}`; // e.g., scooter:ABC123
   </script>
 </body>
 </html>
