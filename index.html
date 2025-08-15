@@ -103,7 +103,7 @@
       storageBucket: "yana-qr.firebasestorage.app",
       messagingSenderId: "905613005387",
       appId: "1:905613005387:web:b0d8464d826972654b73ce"
-      measurementId: "G-9P9DLJGQHQ"
+      
     };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -118,22 +118,34 @@
     const show = (el,html)=>{ el.innerHTML = html; }
 
     // ====== 3) AUTH ======
-    q('#btnRegister').onclick = async ()=>{
-      const email=q('#email').value.trim();
-      const pass=q('#password').value;
-      try{
-        await createUserWithEmailAndPassword(auth,email,pass);
-        log(`✅ Account created for <b>${email}</b>`,'ok');
-      }catch(e){ log(`❌ ${e.message}`,'err'); }
-    };
-    q('#btnSignIn').onclick = async ()=>{
-      const email=q('#email').value.trim();
-      const pass=q('#password').value;
-      try{
-        await signInWithEmailAndPassword(auth,email,pass);
-        log(`🔐 Signed in as <b>${email}</b>`,'ok');
-      }catch(e){ log(`❌ ${e.message}`,'err'); }
-    };
+q('#btnRegister').onclick = async ()=>{
+  const email = q('#email').value.trim();
+  const pass = q('#password').value;
+  console.log("[DEBUG] Register clicked:", {email});
+  try {
+    const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+    console.log("[DEBUG] Account created:", userCred.user.email);
+    log(`✅ Account created for <b>${userCred.user.email}</b>`,'ok');
+  } catch(e) {
+    console.error("[DEBUG] Registration failed:", e);
+    log(`❌ ${e.code}: ${e.message}`,'err');
+  }
+};
+
+   q('#btnSignIn').onclick = async ()=>{
+  const email = q('#email').value.trim();
+  const pass = q('#password').value;
+  console.log("[DEBUG] Sign-in clicked:", {email});
+  try {
+    const userCred = await signInWithEmailAndPassword(auth, email, pass);
+    console.log("[DEBUG] Signed in:", userCred.user.email);
+    log(`🔐 Signed in as <b>${userCred.user.email}</b>`,'ok');
+  } catch(e) {
+    console.error("[DEBUG] Sign-in failed:", e);
+    log(`❌ ${e.code}: ${e.message}`,'err');
+  }
+};
+
     q('#btnSignOut').onclick = ()=> signOut(auth);
 
     let currentUser = null;
