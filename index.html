@@ -1,505 +1,612 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yana — Scooter & Battery Linker</title>
-  <meta name="description" content="Scan QR codes to link/deregister scooters & batteries to a rider email. Firebase Firestore logging included." />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Yana QR - Rider Register</title>
+
+  <!-- ========== STYLES ========== -->
   <style>
-    /* ==========================
-       GLOBAL THEME
-       - Black background
-       - Action color: #00eaff
-       ========================== */
-    :root {
-      --bg: #000000;
-      --fg: #e8f7fb;
-      --muted: #9adbea;
-      --action: #00eaff;
-      --card: #0c0c0c;
-      --ok: #00eaff; /* action hue for primary accents */
-      --warn: #ffd166;
-      --err: #ff6b6b;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --round: 16px;
+    /* ---------- Theme & layout ---------- */
+    :root{
+      --bg:#000;
+      --action:#00eaff;
+      --muted: #9aa6ac;
+      --card:#0b0b0b;
+      --glass: rgba(255,255,255,0.03);
+      --accent-text: #001f23;
+      --radius:14px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
     }
-    html, body {
-      margin: 0; padding: 0; background: var(--bg); color: var(--fg);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-    }
-    .container {
-      max-width: 980px; margin: 0 auto; padding: 24px 16px 60px;
-    }
-    header {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px;
-    }
-    .brand { font-weight: 700; letter-spacing: 0.2px; }
-    .brand span {
-      color: var(--action);
-    }
-    .card {
-      background: var(--card); border: 1px solid #111; border-radius: var(--round); padding: 16px; box-shadow: 0 0 0 1px rgba(0, 234, 255, 0.06), 0 8px 32px rgba(0,0,0,0.35);
-    }
-    .stack { display: grid; gap: 16px; }
-    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-    input, button, select { border-radius: 10px; }
-    input[type="email"], input[type="text"] {
-      background: #0f0f0f; border: 1px solid #1a1a1a; color: var(--fg);
-      padding: 10px 12px; font-size: 16px; outline: none; width: min(480px, 100%);
-    }
-    input::placeholder { color: #4e575a; }
-    button {
-      background: transparent; border: 1px solid var(--action); color: var(--action);
-      padding: 10px 14px; font-weight: 600; cursor: pointer; transition: 0.2s ease; font-size: 15px;
-    }
-    button:hover { background: rgba(0, 234, 255, 0.1); }
-    button.primary { background: var(--action); color: #001318; border-color: var(--action); }
-    button.primary:hover { filter: brightness(1.05); }
-
-    .pill { border: 1px solid #1a1a1a; padding: 8px 10px; border-radius: 999px; font-size: 13px; color: var(--muted); }
-    .muted { color: var(--muted); }
-    .mono { font-family: var(--mono); }
-
-    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
-    @media (min-width: 900px) {
-      .grid { grid-template-columns: 1.2fr 0.8fr; }
+    html,body{height:100%;margin:0;background:var(--bg);color:#fff;}
+    *{box-sizing:border-box}
+    .container{
+      max-width:1100px;margin:28px auto;padding:24px;
     }
 
-    /* Scanner area */
-    #reader { width: 100%; min-height: 320px; }
-    #reader > div { border-radius: 12px !important; overflow: hidden; }
+    header{
+      display:flex;align-items:center;gap:18px;margin-bottom:22px;
+    }
+    .logo{
+      width:72px;height:72px;border-radius:12px;background:linear-gradient(135deg,var(--action),#00ffd8);
+      display:flex;align-items:center;justify-content:center;color:#000;font-weight:700;font-size:20px;
+      box-shadow:0 8px 30px rgba(0,234,255,0.08);position:relative;overflow:hidden;
+    }
+    .brand{font-size:18px;font-weight:600}
+    .sub{font-size:12px;color:var(--muted)}
+    .top-actions{margin-left:auto;display:flex;gap:10px;align-items:center}
 
-    .status { font-size: 14px; }
-    .status.ok { color: var(--ok); }
-    .status.err { color: var(--err); }
-    .status.warn { color: var(--warn); }
+    /* card */
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      padding:18px;border-radius:var(--radius);box-shadow:0 6px 24px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.03);
+    }
 
-    .list { display: grid; gap: 8px; }
-    .list-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px; background: #0a0a0a; border: 1px solid #121212; border-radius: 10px; }
-    .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--action); }
-    .tag { font-size: 12px; border: 1px solid #1d1d1d; color: var(--muted); padding: 2px 8px; border-radius: 999px; }
-    .code { font-family: var(--mono); background: #0a0a0a; border: 1px dashed #1b1b1b; padding: 2px 6px; border-radius: 8px; }
-    .footer { opacity: 0.8; font-size: 12px; }
+    /* sign in/out */
+    .btn{
+      background:var(--action);border:none;color:#001; padding:10px 16px;border-radius:12px;font-weight:700;cursor:pointer;
+      box-shadow:0 6px 18px rgba(0,234,255,0.12);
+    }
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+    .small{font-size:13px;padding:8px 10px;border-radius:10px;}
+
+    /* two-column layout */
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
+    @media(max-width:960px){ .grid{grid-template-columns:1fr} .logo{width:56px;height:56px}}
+
+    /* scanner area */
+    .scanner{
+      display:flex;flex-direction:column;gap:12px;
+    }
+    #video{width:100%;border-radius:12px; background:#000; height:360px;object-fit:cover;border:1px solid rgba(255,255,255,0.03)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
+
+    /* device info & logs */
+    .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
+    .log-list{max-height:380px;overflow:auto;margin-top:8px;padding-right:8px}
+    .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
+    .muted{color:var(--muted);font-size:13px}
+
+    /* input & file */
+    .file-input{display:flex;gap:8px;align-items:center}
+    .logo-preview{width:56px;height:56px;border-radius:8px;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    input[type=file]{display:none}
+    label.file-btn{padding:8px 10px;border-radius:10px;border:1px dashed rgba(255,255,255,0.06);cursor:pointer;font-size:13px;color:var(--muted)}
+
+    footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
   </style>
 </head>
+
 <body>
   <div class="container">
+    <!-- HEADER: logo, brand, signin, svg upload -->
     <header>
-      <div class="brand">Yana <span>QR Linker</span></div>
-      <div class="pill">Action colour: <span class="code">#00eaff</span></div>
+      <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
+        <!-- default inline SVG logo (replaceable) -->
+        <svg id="appLogo" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
+          <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+
+      <div>
+        <div class="brand">Yana — Rider QR</div>
+        <div class="sub">Scan · Register · Log</div>
+      </div>
+
+      <div class="top-actions">
+        <div id="user-email" class="muted">Not signed in</div>
+        <button id="signinBtn" class="btn small">Sign in with Google</button>
+        <button id="signoutBtn" class="btn small ghost" style="display:none">Sign out</button>
+      </div>
     </header>
 
     <div class="grid">
-      <!-- LEFT: Scanner + Controls -->
-      <section class="stack">
-        <div class="card stack">
-          <h2>1) Identify Rider</h2>
-          <div class="row">
-            <input id="email" type="email" placeholder="Enter rider email (required)" />
-            <button id="saveEmailBtn" class="primary">Save Rider</button>
-            <span id="riderStatus" class="status">No rider set.</span>
-          </div>
-          <p class="muted" style="margin-top:-4px">We use this email to attach/detach scooters and batteries. No password or sign-in needed for this demo.</p>
+      <!-- LEFT: Scanner + controls -->
+      <div class="card scanner">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">QR Scanner</div>
+          <div class="muted">Action color: <span style="color:var(--action)">●</span></div>
         </div>
 
-        <div class="card stack">
-          <h2>2) Scan or Enter QR</h2>
-          <div class="row">
-            <button id="startScanBtn" class="primary">Start Camera</button>
-            <button id="stopScanBtn">Stop Camera</button>
-            <span id="scanStatus" class="status">Scanner idle.</span>
-          </div>
-          <div id="reader"></div>
+        <!-- video preview -->
+        <video id="video" playsinline></video>
 
-          <div class="row">
-            <input id="manualId" type="text" placeholder="Or type an ID like sct001 or bat001 and click Register/Deregister" />
-            <button id="manualSubmitBtn">Register / Deregister</button>
-          </div>
+        <!-- controls -->
+        <div class="controls">
+          <button id="startCam" class="btn small">Start Camera</button>
+          <button id="stopCam" class="btn small ghost">Stop Camera</button>
 
-          <div class="row">
-            <span class="muted">Tip: QR text must be the asset ID, e.g. <span class="code">sct001</span> or <span class="code">bat001</span>.</span>
+          <select id="scanMode" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:8px;border-radius:10px">
+            <option value="auto">Auto-detect (scooter/battery)</option>
+            <option value="scooter">Force: Scooter</option>
+            <option value="battery">Force: Battery</option>
+          </select>
+
+          <div id="permissionStatus" class="status">Camera idle</div>
+        </div>
+
+        <!-- last scan + action -->
+        <div class="info-row">
+          <div>
+            <div class="muted">Last decoded</div>
+            <div id="lastDecoded" style="font-weight:700">—</div>
+            <div class="muted" id="lastDeviceInfo">—</div>
+          </div>
+          <div style="text-align:right">
+            <button id="submitScan" class="btn small" disabled>Submit</button>
+            <div class="muted" style="margin-top:6px;font-size:12px">Scan → Submit</div>
           </div>
         </div>
 
-        <div class="card stack">
-          <h2>3) Rider's Current Links</h2>
-          <div class="row">
-            <div id="currentScooters" class="tag">Scooters: 0</div>
-            <div id="currentBatteries" class="tag">Batteries: 0</div>
-          </div>
-          <div id="riderAssets" class="list"></div>
-        </div>
-      </section>
+        <div class="muted" style="margin-top:8px;font-size:13px">Tip: QR payloads like <code>scooter:SC001</code> or <code>battery:BAT100</code> work best. Plain IDs are auto-detected.</div>
 
-      <!-- RIGHT: Activity Log -->
-      <aside class="stack">
-        <div class="card stack">
-          <h2>Recent Activity</h2>
-          <div class="row">
-            <button id="refreshLogsBtn">Refresh Logs</button>
-            <span class="muted">Shows latest 25 actions.</span>
-          </div>
-          <div id="logs" class="list"></div>
+      </div>
+
+      <!-- RIGHT: summary, device status, logs, upload logo -->
+      <aside class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Rider & Devices</div>
+          <div class="muted small">Realtime DB: Firestore</div>
         </div>
 
-        <div class="card stack">
-          <h2>Tech Info</h2>
-          <div class="list">
-            <div class="list-item"><div class="dot"></div><div>Firestore Collections</div><div class="tag">riders / scooters / batteries / logs</div></div>
-            <div class="list-item"><div class="dot"></div><div>QR Format</div><div class="tag">sct001 / bat001</div></div>
-            <div class="list-item"><div class="dot"></div><div>Toggle Behavior</div><div class="tag">Scan→link; scan again→unlink</div></div>
+        <div style="margin-top:12px">
+          <div class="muted">Signed-in rider</div>
+          <div id="riderInfo" style="font-weight:700;margin-top:6px">—</div>
+
+          <div style="margin-top:12px" class="muted">Linked scooter</div>
+          <div id="linkedScooter" style="font-weight:700;margin-top:6px">—</div>
+
+          <div style="margin-top:12px" class="muted">Linked battery</div>
+          <div id="linkedBattery" style="font-weight:700;margin-top:6px">—</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:14px 0">
+
+        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+          <div style="font-weight:700">Recent logs</div>
+          <button id="refreshLogs" class="btn small ghost">Refresh</button>
+        </div>
+
+        <div class="log-list" id="logList">
+          <!-- dynamic logs -->
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:14px 0">
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="muted">Replace app SVG logo</div>
+          <div class="file-input">
+            <div class="logo-preview" id="svgPreview">
+              <!-- preview -->
+            </div>
+            <label for="svgUpload" class="file-btn">Upload SVG</label>
+            <input id="svgUpload" type="file" accept=".svg">
+            <div style="margin-left:auto;color:var(--muted);font-size:13px">SVG only</div>
           </div>
-          <p class="footer">For production, lock down security rules. This demo uses client-side writes for simplicity.</p>
         </div>
       </aside>
     </div>
+
+    <footer class="muted">Built for Yana — keep your riders & devices tracked. Logs saved to Firestore.</footer>
   </div>
 
-  <!-- ==========================
-       LIBRARIES (CDN)
-       - Firebase (compat for simplicity in plain JS)
-       - html5-qrcode (camera scanner)
-       ========================== -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics-compat.js"></script>
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <!-- ========== SCRIPTS ========== -->
+  <!-- Firebase JS SDKs (modular) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- QR decoding library: jsQR (lightweight) -->
+  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
   <script>
-    /* =============================================================
-       FIREBASE SETUP
-       - Uses the project settings provided by you
-       - Writes to Firestore: riders, scooters, batteries, logs
-       ============================================================= */
-    const firebaseConfig = {
-      apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
-      authDomain: "yana-qr.firebaseapp.com",
-      projectId: "yana-qr",
-      storageBucket: "yana-qr.firebasestorage.app",
-      messagingSenderId: "905613005387",
-      appId: "1:905613005387:web:b0d8464d826972654b73ce",
-      measurementId: "G-9P9DLJGQHQ"
-    };
+  /**************************************************************************
+   * ========================= IMPORTANT CONFIG ============================
+   * Replace the firebaseConfig below with what you provided (already done).
+   * This page uses Firebase Authentication (Google popup) + Firestore.
+   **************************************************************************/
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+  const firebaseConfig = {
+    apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+    authDomain: "yana-qr.firebaseapp.com",
+    projectId: "yana-qr",
+    storageBucket: "yana-qr.firebasestorage.app",
+    messagingSenderId: "905613005387",
+    appId: "1:905613005387:web:b0d8464d826972654b73ce",
+    measurementId: "G-9P9DLJGQHQ"
+  };
 
-    /* =============================================================
-       STATE & HELPERS
-       - Manage rider email in memory & localStorage
-       - Small helpers for UI + time formatting
-       ============================================================= */
-    let currentEmail = localStorage.getItem('yana_rider_email') || '';
+  // ========== Initialize Firebase ==========
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
 
-    const $ = (id) => document.getElementById(id);
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  /**************************************************************************
+   * ========================= UI ELEMENTS =================================
+   **************************************************************************/
+  const video = document.getElementById('video');
+  const startCamBtn = document.getElementById('startCam');
+  const stopCamBtn = document.getElementById('stopCam');
+  const permissionStatus = document.getElementById('permissionStatus');
+  const lastDecoded = document.getElementById('lastDecoded');
+  const lastDeviceInfo = document.getElementById('lastDeviceInfo');
+  const submitScanBtn = document.getElementById('submitScan');
+  const scanMode = document.getElementById('scanMode');
+  const signinBtn = document.getElementById('signinBtn');
+  const signoutBtn = document.getElementById('signoutBtn');
+  const userEmailEl = document.getElementById('user-email');
+  const riderInfo = document.getElementById('riderInfo');
+  const linkedScooter = document.getElementById('linkedScooter');
+  const linkedBattery = document.getElementById('linkedBattery');
+  const logList = document.getElementById('logList');
+  const refreshLogs = document.getElementById('refreshLogs');
+  const svgUpload = document.getElementById('svgUpload');
+  const appLogo = document.getElementById('appLogo');
+  const svgPreview = document.getElementById('svgPreview');
 
-    function nowIso() { return new Date().toISOString(); }
-    function humanTime(ts) {
-      try { return new Date(ts).toLocaleString(); } catch { return ts; }
+  /**************************************************************************
+   * ========================= AUTHENTICATION ===============================
+   * We use Firebase Google provider with a single-click popup sign-in.
+   * If you want Google One-Tap later, you'll need an OAuth client ID
+   * from Google Cloud and small integration changes.
+   **************************************************************************/
+
+  signinBtn.addEventListener('click', async () => {
+    try{
+      signinBtn.disabled = true;
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await auth.signInWithPopup(provider);
+      signinBtn.disabled = false;
+    }catch(e){
+      console.error('Sign-in failed', e);
+      alert('Sign-in failed: '+e.message);
+      signinBtn.disabled = false;
     }
+  });
 
-    function setStatus(el, text, kind = '') {
-      el.textContent = text;
-      el.className = `status ${kind}`.trim();
-    }
+  signoutBtn.addEventListener('click', async ()=>{
+    await auth.signOut();
+  });
 
-    function assertEmailOrThrow() {
-      const email = $('email').value.trim().toLowerCase();
-      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-        throw new Error('Please enter a valid email.');
+  // Auth state change listener (updates UI & loads user doc)
+  auth.onAuthStateChanged(async (user)=>{
+    if(user){
+      userEmailEl.textContent = user.email;
+      riderInfo.textContent = `${user.displayName || 'Rider'} (${user.email})`;
+      signinBtn.style.display = 'none';
+      signoutBtn.style.display = 'inline-block';
+
+      // ensure user doc exists
+      const uDocRef = db.collection('users').doc(user.email);
+      const uDoc = await uDocRef.get();
+      if(!uDoc.exists){
+        await uDocRef.set({
+          email: user.email,
+          name: user.displayName||null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          linkedScooter: null,
+          linkedBattery: null
+        });
       }
-      return email;
+      // refresh user's linked devices
+      loadUserDevices();
+      // refresh some recent logs
+      loadLogs();
+    } else {
+      userEmailEl.textContent = 'Not signed in';
+      riderInfo.textContent = '—';
+      linkedScooter.textContent = '—';
+      linkedBattery.textContent = '—';
+      signinBtn.style.display = 'inline-block';
+      signoutBtn.style.display = 'none';
+      logList.innerHTML = '';
     }
+  });
 
-    /* =============================================================
-       FIRESTORE DATA MODEL
-       - riders/{email}: { email, scooters:[], batteries:[], updatedAt }
-       - scooters/{id}:  { id, assignedTo:null|email, updatedAt }
-       - batteries/{id}: { id, assignedTo:null|email, updatedAt }
-       - logs/{autoId}:  { ts, action, kind:'scooter|battery', id, byEmail, note }
-       ============================================================= */
+  /**************************************************************************
+   * ========================= CAMERA & QR SCANNER ===========================
+   * We'll use getUserMedia, draw frames to a hidden canvas, run jsQR on them.
+   **************************************************************************/
+  let stream = null;
+  let scanning = false;
+  let scanInterval = null;
+  let lastRawResult = null;
 
-    async function ensureRiderDoc(email) {
-      const ref = db.collection('riders').doc(email);
-      const snap = await ref.get();
-      if (!snap.exists) {
-        await ref.set({ email, scooters: [], batteries: [], updatedAt: nowIso() });
+  // helper: start camera
+  async function startCamera(){
+    try{
+      permissionStatus.textContent = 'Requesting camera...';
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false});
+      video.srcObject = stream;
+      await video.play();
+      permissionStatus.textContent = 'Camera active';
+      startCamBtn.style.display = 'none';
+      stopCamBtn.style.display = 'inline-block';
+      scanning = true;
+      scanLoop();
+    }catch(err){
+      console.error('Camera error', err);
+      permissionStatus.textContent = 'Camera permission denied or not available';
+      alert('Camera access is required for scanning. Please allow camera permissions and try again.');
+    }
+  }
+
+  // helper: stop camera
+  function stopCamera(){
+    scanning = false;
+    permissionStatus.textContent = 'Camera stopped';
+    startCamBtn.style.display = 'inline-block';
+    stopCamBtn.style.display = 'none';
+    if(stream){
+      stream.getTracks().forEach(t=>t.stop());
+      stream = null;
+    }
+    if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
+  }
+
+  startCamBtn.addEventListener('click', startCamera);
+  stopCamBtn.addEventListener('click', stopCamera);
+
+  // main scan loop: create a canvas and run jsQR on image data every 300ms
+  function scanLoop(){
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    scanInterval = setInterval(()=>{
+      if(!scanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: "attemptBoth"});
+      if(code){
+        // got a QR result
+        lastRawResult = code.data.trim();
+        lastDecoded.textContent = lastRawResult;
+        // show a nice short device info
+        const parsed = parsePayload(lastRawResult);
+        lastDeviceInfo.textContent = `${parsed.type.toUpperCase()}: ${parsed.id}`;
+        submitScanBtn.disabled = false;
+        // brief flash on permissionStatus
+        permissionStatus.textContent = `Detected ${parsed.type} ${parsed.id}`;
       }
-      return ref;
+    }, 300);
+  }
+
+  /**************************************************************************
+   * ========================= PARSING LOGIC =================================
+   * We accept the following QR payload patterns:
+   *  - scooter:SC001
+   *  - battery:BAT100
+   *  - SC001  (auto-detect: letters like SC or BAT)
+   *
+   * Output: {type: 'scooter'|'battery'|'unknown', id:'...'}
+   **************************************************************************/
+  function parsePayload(raw){
+    if(!raw) return {type:'unknown', id:'', raw};
+    const r = raw.toLowerCase();
+    // common prefixes
+    if(r.startsWith('scooter:') || r.startsWith('sc:')) {
+      return {type:'scooter', id: raw.split(':')[1].trim(), raw};
+    }
+    if(r.startsWith('battery:') || r.startsWith('bat:')) {
+      return {type:'battery', id: raw.split(':')[1].trim(), raw};
+    }
+    // detect by letters: common naming SC / BAT
+    if(/[bB]at|battery/.test(raw) || raw.match(/^bat/i)) return {type:'battery', id:raw.replace(/^bat[:\-\s]*/i,'').trim(), raw};
+    if(/[sS]c|scooter/.test(raw) || raw.match(/^sc/i)) return {type:'scooter', id:raw.replace(/^sc[:\-\s]*/i,'').trim(), raw};
+    // fallback: if user forced mode, honor it
+    const forced = scanMode.value;
+    if(forced === 'scooter') return {type:'scooter', id:raw, raw};
+    if(forced === 'battery') return {type:'battery', id:raw, raw};
+    // unknown
+    return {type:'unknown', id:raw, raw};
+  }
+
+  /**************************************************************************
+   * ========================= SUBMIT / REGISTER LOGIC =======================
+   * - ensures a user must sign in
+   * - ensures user can have only one scooter and one battery
+   * - toggles registration/deregistration when same device is scanned
+   * - logs every action in `logs` collection
+   *
+   * Firestore collections used:
+   *  - users (doc id = user.email) : { linkedScooter, linkedBattery, ... }
+   *  - devices (doc id = DEVICE_ID) : { type, linkedTo (email|null), lastSeen }
+   *  - logs (auto id) : {ts, email, action, deviceType, deviceId, rawPayload}
+   **************************************************************************/
+  submitScanBtn.addEventListener('click', async ()=>{
+    const user = auth.currentUser;
+    if(!user){
+      alert('Please sign in with Google first.');
+      return;
+    }
+    if(!lastRawResult){
+      alert('No QR code scanned yet. Please scan and then submit.');
+      return;
     }
 
-    async function getItemRefAndKind(assetId) {
-      const id = String(assetId).trim();
-      if (!id) throw new Error('Empty ID');
-      if (id.startsWith('sct')) return { kind: 'scooter', ref: db.collection('scooters').doc(id) };
-      if (id.startsWith('bat')) return { kind: 'battery', ref: db.collection('batteries').doc(id) };
-      throw new Error('ID must start with "sct" or "bat" (e.g., sct001, bat001).');
-    }
-
-    async function logEvent(entry) {
-      const base = { ts: nowIso(), ...entry };
-      await db.collection('logs').add(base);
-    }
-
-    async function registerItem(email, kind, itemRef) {
-      const id = itemRef.id;
-      // Transaction to ensure consistency
-      await db.runTransaction(async (tx) => {
-        const riderRef = db.collection('riders').doc(email);
-        const [riderSnap, itemSnap] = await Promise.all([
-          tx.get(riderRef),
-          tx.get(itemRef)
-        ]);
-
-        if (!riderSnap.exists) {
-          tx.set(riderRef, { email, scooters: [], batteries: [], updatedAt: nowIso() });
-        }
-        const rider = riderSnap.exists ? riderSnap.data() : { scooters: [], batteries: [] };
-        const item = itemSnap.exists ? itemSnap.data() : { assignedTo: null };
-
-        if (item.assignedTo && item.assignedTo !== email) {
-          throw new Error(`${kind} ${id} is already assigned to ${item.assignedTo}.`);
-        }
-
-        // update item
-        tx.set(itemRef, { id, assignedTo: email, updatedAt: nowIso() }, { merge: true });
-
-        // update rider
-        const field = kind === 'scooter' ? 'scooters' : 'batteries';
-        const arr = new Set([...(rider[field] || []), id]);
-        tx.set(riderRef, { [field]: Array.from(arr), updatedAt: nowIso() }, { merge: true });
-      });
-
-      await logEvent({ action: 'register', kind, id: itemRef.id, byEmail: email });
-      return { ok: true };
-    }
-
-    async function deregisterItem(email, kind, itemRef) {
-      const id = itemRef.id;
-      await db.runTransaction(async (tx) => {
-        const riderRef = db.collection('riders').doc(email);
-        const [riderSnap, itemSnap] = await Promise.all([
-          tx.get(riderRef),
-          tx.get(itemRef)
-        ]);
-
-        const item = itemSnap.exists ? itemSnap.data() : { assignedTo: null };
-        if (item.assignedTo !== email) {
-          throw new Error(`${kind} ${id} is not assigned to ${email}.`);
-        }
-
-        // clear item assignment
-        tx.set(itemRef, { id, assignedTo: null, updatedAt: nowIso() }, { merge: true });
-
-        // remove from rider list
-        if (riderSnap.exists) {
-          const rider = riderSnap.data();
-          const field = kind === 'scooter' ? 'scooters' : 'batteries';
-          const next = (rider[field] || []).filter(x => x !== id);
-          tx.set(riderRef, { [field]: next, updatedAt: nowIso() }, { merge: true });
-        }
-      });
-
-      await logEvent({ action: 'deregister', kind, id: itemRef.id, byEmail: email });
-      return { ok: true };
-    }
-
-    async function processAsset(email, assetId) {
-      const { kind, ref } = await getItemRefAndKind(assetId);
-      const snap = await ref.get();
-      const assignedTo = snap.exists ? (snap.data().assignedTo || null) : null;
-
-      if (!assignedTo) {
-        // Not assigned → register to this rider
-        await registerItem(email, kind, ref);
-        return { action: 'registered', kind, id: ref.id };
-      } else if (assignedTo === email) {
-        // Assigned to same rider → toggle off
-        await deregisterItem(email, kind, ref);
-        return { action: 'deregistered', kind, id: ref.id };
-      } else {
-        // Assigned to someone else → block
-        await logEvent({ action: 'scan-blocked', kind, id: ref.id, byEmail: email, note: `Assigned to ${assignedTo}` });
-        throw new Error(`${kind} ${ref.id} belongs to ${assignedTo}. Ask admin to free it first.`);
-      }
-    }
-
-    /* =============================================================
-       UI: RIDER PANEL
-       - Save email, ensure rider doc, render assigned assets
-       ============================================================= */
-    async function refreshRiderPanel() {
-      const email = currentEmail;
-      if (!email) {
-        $('riderStatus').textContent = 'No rider set.';
-        $('riderAssets').innerHTML = '';
-        $('currentScooters').textContent = 'Scooters: 0';
-        $('currentBatteries').textContent = 'Batteries: 0';
+    const parsed = parsePayload(lastRawResult);
+    if(parsed.type === 'unknown'){
+      if(!confirm('Unable to detect device type (scooter/battery). Submit as plain device id?')) {
         return;
       }
-      $('email').value = email;
-      const snap = await db.collection('riders').doc(email).get();
-      const data = snap.exists ? snap.data() : { scooters: [], batteries: [] };
-      $('riderStatus').innerHTML = `Rider: <span class="mono">${email}</span>`;
-      $('currentScooters').textContent = `Scooters: ${(data.scooters||[]).length}`;
-      $('currentBatteries').textContent = `Batteries: ${(data.batteries||[]).length}`;
+      // treat as unknown, but we won't allow unknown types; force user to pick mode
+      alert('Select correct mode (top-right dropdown) to indicate Scooter or Battery.');
+      return;
+    }
 
-      const items = [
-        ...(data.scooters||[]).map(id => ({ kind: 'scooter', id })),
-        ...(data.batteries||[]).map(id => ({ kind: 'battery', id }))
-      ];
-      items.sort((a,b)=> a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
-      $('riderAssets').innerHTML = items.map(x => `
-        <div class="list-item">
-          <div class="dot"></div>
-          <div><strong>${x.kind}</strong> <span class="code">${x.id}</span></div>
-          <button data-kind="${x.kind}" data-id="${x.id}" class="asset-unlink">Unlink</button>
-        </div>`).join('') || '<div class="muted">No assets linked yet.</div>';
+    // perform transactional checks & updates
+    try{
+      submitScanBtn.disabled = true;
+      permissionStatus.textContent = 'Processing...';
+      await processScan(user.email, parsed.type, parsed.id, parsed.raw);
+      permissionStatus.textContent = 'Done';
+      // update UI
+      loadUserDevices();
+      loadLogs();
+      submitScanBtn.disabled = false;
+    }catch(e){
+      submitScanBtn.disabled = false;
+      permissionStatus.textContent = 'Error';
+      alert('Operation failed: ' + e.message);
+      console.error(e);
+    }
+  });
 
-      // Add unlink handlers
-      document.querySelectorAll('.asset-unlink').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const id = e.currentTarget.getAttribute('data-id');
-          const kind = e.currentTarget.getAttribute('data-kind');
-          const { ref } = await getItemRefAndKind(kind === 'scooter' ? id : id);
-          try {
-            setStatus($('scanStatus'), `Unlinking ${kind} ${id}…`, '');
-            await deregisterItem(email, kind, db.collection(kind === 'scooter' ? 'scooters' : 'batteries').doc(id));
-            setStatus($('scanStatus'), `Unlinked ${kind} ${id}.`, 'ok');
-            await Promise.all([ refreshRiderPanel(), refreshLogs() ]);
-          } catch (err) {
-            setStatus($('scanStatus'), err.message, 'err');
-          }
+  /**
+   * processScan: core logic for register/deregister
+   * - Ensures atomicity using Firestore transactions
+   */
+  async function processScan(email, deviceType, deviceId, rawPayload){
+    // canonicalize device doc id (prefix with type to avoid conflicts)
+    const devDocId = `${deviceType}_${deviceId}`;
+    const userRef = db.collection('users').doc(email);
+    const devRef = db.collection('devices').doc(devDocId);
+    const logsRef = db.collection('logs');
+
+    await db.runTransaction(async (tx)=>{
+      const userSnap = await tx.get(userRef);
+      if(!userSnap.exists){
+        throw new Error('User document missing. Sign-in again.');
+      }
+      const userData = userSnap.data();
+      const userLinked = deviceType === 'scooter' ? userData.linkedScooter : userData.linkedBattery;
+
+      const devSnap = await tx.get(devRef);
+      let devData = devSnap.exists ? devSnap.data() : null;
+
+      // if device doc missing, create it (unlinked)
+      if(!devData){
+        devData = { type: deviceType, linkedTo: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() };
+        tx.set(devRef, devData);
+      }
+
+      // CASES:
+      // 1) user has no linked device of this type -> attempt to link
+      if(!userLinked){
+        // device must be unlinked
+        if(devData.linkedTo){
+          throw new Error(`${deviceType} ${deviceId} is already linked to another rider (${devData.linkedTo}).`);
+        }
+        // link device to user
+        const userUpdate = (deviceType === 'scooter') ? { linkedScooter: deviceId } : { linkedBattery: deviceId };
+        tx.update(userRef, {...userUpdate, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+        tx.update(devRef, { linkedTo: email, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+        // log
+        tx.set(logsRef.doc(), {
+          ts: firebase.firestore.FieldValue.serverTimestamp(),
+          email, action: 'register', deviceType, deviceId, rawPayload
         });
-      });
-    }
-
-    $('saveEmailBtn').addEventListener('click', async () => {
-      try {
-        const email = assertEmailOrThrow();
-        currentEmail = email;
-        localStorage.setItem('yana_rider_email', email);
-        await ensureRiderDoc(email);
-        setStatus($('riderStatus'), `Saved rider: ${email}`, 'ok');
-        await refreshRiderPanel();
-      } catch (err) {
-        setStatus($('riderStatus'), err.message, 'err');
+        return;
       }
+
+      // 2) user already linked to some device:
+      // - if linked to same device -> deregister (toggle)
+      if(userLinked === deviceId){
+        // deregister
+        const userUpdate = (deviceType === 'scooter') ? { linkedScooter: null } : { linkedBattery: null };
+        tx.update(userRef, {...userUpdate, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+        // only clear device if it's linked to this user (extra safety)
+        if(devData.linkedTo === email){
+          tx.update(devRef, { linkedTo: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+        }
+        tx.set(logsRef.doc(), {
+          ts: firebase.firestore.FieldValue.serverTimestamp(),
+          email, action: 'deregister', deviceType, deviceId, rawPayload
+        });
+        return;
+      }
+
+      // 3) user linked to a DIFFERENT device of same type: throw error - must deregister first.
+      throw new Error(`You already have a linked ${deviceType} (${userLinked}). Please deregister it first by scanning the same ${deviceType} QR and submitting.`);
     });
+  }
 
-    /* =============================================================
-       UI: LOGS PANEL
-       - Pull recent 25 entries, newest first
-       ============================================================= */
-    async function refreshLogs() {
-      const snap = await db.collection('logs').orderBy('ts', 'desc').limit(25).get();
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      $('logs').innerHTML = docs.map(x => `
-        <div class="list-item">
-          <div class="dot"></div>
-          <div>
-            <div><strong>${x.action}</strong> <span class="tag">${x.kind || 'n/a'}</span> <span class="code">${x.id || ''}</span></div>
-            <div class="muted">by <span class="mono">${x.byEmail || 'unknown'}</span> • ${humanTime(x.ts)}</div>
-          </div>
-          <div class="tag">${x.note ? x.note : ''}</div>
-        </div>
-      `).join('');
+  /**************************************************************************
+   * ========================= UI: load user & logs ==========================
+   **************************************************************************/
+  async function loadUserDevices(){
+    const user = auth.currentUser;
+    if(!user) return;
+    const uDoc = await db.collection('users').doc(user.email).get();
+    const data = uDoc.exists ? uDoc.data() : null;
+    linkedScooter.textContent = data && data.linkedScooter ? data.linkedScooter : '—';
+    linkedBattery.textContent = data && data.linkedBattery ? data.linkedBattery : '—';
+  }
+
+  // load recent logs (last 50)
+  async function loadLogs(){
+    logList.innerHTML = `<div class="muted">Loading logs...</div>`;
+    const q = db.collection('logs').orderBy('ts','desc').limit(50);
+    const snap = await q.get();
+    logList.innerHTML = '';
+    if(snap.empty){
+      logList.innerHTML = '<div class="muted">No logs yet</div>';
+      return;
     }
-    $('refreshLogsBtn').addEventListener('click', refreshLogs);
-
-    /* =============================================================
-       SCANNER (html5-qrcode)
-       - Start/stop camera, handle decoded text
-       ============================================================= */
-    let html5Qr = null;
-    let scanning = false;
-
-    async function onScanSuccess(decodedText) {
-      if (!decodedText) return;
-      const email = currentEmail || $('email').value.trim();
-      if (!email) { setStatus($('scanStatus'), 'Set rider email first.', 'warn'); return; }
-      try {
-        await ensureRiderDoc(email);
-        setStatus($('scanStatus'), `Scanned: ${decodedText}. Processing…`);
-        const result = await processAsset(email, decodedText.trim());
-        setStatus($('scanStatus'), `${result.kind} ${result.id} ${result.action}.`, 'ok');
-        await Promise.all([ refreshRiderPanel(), refreshLogs() ]);
-      } catch (err) {
-        setStatus($('scanStatus'), err.message, 'err');
-      }
-    }
-
-    function startScanner() {
-      if (scanning) return;
-      const config = { fps: 10, qrbox: { width: 280, height: 280 } };
-      html5Qr = new Html5Qrcode("reader");
-      html5Qr.start({ facingMode: "environment" }, config, onScanSuccess)
-        .then(() => { scanning = true; setStatus($('scanStatus'), 'Scanner running…', 'ok'); })
-        .catch(err => { setStatus($('scanStatus'), err.message || String(err), 'err'); });
-    }
-    async function stopScanner() {
-      if (!html5Qr) return;
-      try { await html5Qr.stop(); await html5Qr.clear(); } catch {}
-      scanning = false; setStatus($('scanStatus'), 'Scanner stopped.');
-    }
-
-    $('startScanBtn').addEventListener('click', startScanner);
-    $('stopScanBtn').addEventListener('click', stopScanner);
-
-    /* =============================================================
-       MANUAL ENTRY (no camera)
-       - Type sct001 or bat001 → toggles link
-       ============================================================= */
-    $('manualSubmitBtn').addEventListener('click', async () => {
-      const id = $('manualId').value.trim();
-      const email = currentEmail || $('email').value.trim();
-      if (!email) { setStatus($('scanStatus'), 'Set rider email first.', 'warn'); return; }
-      if (!id) { setStatus($('scanStatus'), 'Enter an ID to process.', 'warn'); return; }
-      try {
-        await ensureRiderDoc(email);
-        setStatus($('scanStatus'), `Processing ${id}…`);
-        const result = await processAsset(email, id);
-        setStatus($('scanStatus'), `${result.kind} ${result.id} ${result.action}.`, 'ok');
-        $('manualId').value = '';
-        await Promise.all([ refreshRiderPanel(), refreshLogs() ]);
-      } catch (err) {
-        setStatus($('scanStatus'), err.message, 'err');
-      }
+    snap.forEach(doc=>{
+      const d = doc.data();
+      const when = d.ts ? new Date(d.ts.toDate()).toLocaleString() : '—';
+      const el = document.createElement('div');
+      el.className = 'log-item';
+      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>${d.action.toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.deviceId})</span></div>
+        <div class="muted" style="font-size:12px">${when}</div>
+      </div>
+      <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload)}</code></div>`;
+      logList.appendChild(el);
     });
+  }
+  refreshLogs.addEventListener('click', loadLogs);
 
-    /* =============================================================
-       BOOTSTRAP
-       - Restore rider from localStorage, paint panels
-       ============================================================= */
-    (async function bootstrap() {
-      if (currentEmail) {
-        $('email').value = currentEmail;
-        await ensureRiderDoc(currentEmail);
-        setStatus($('riderStatus'), `Rider loaded: ${currentEmail}`, 'ok');
+  // helper to escape HTML
+  function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  /**************************************************************************
+   * ========================= SVG UPLOAD (logo change) =====================
+   * Allows upload of an SVG file and replaces inline logo preview and main SVG.
+   **************************************************************************/
+  svgUpload.addEventListener('change', (ev)=>{
+    const f = ev.target.files[0];
+    if(!f) return;
+    if(!f.name.toLowerCase().endsWith('.svg')) return alert('Please upload an SVG file only.');
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const contents = e.target.result;
+      // simple safety: replace the innerHTML of the preview and main logo
+      try{
+        svgPreview.innerHTML = contents;
+        // update main header logo too (if safe)
+        document.getElementById('logo-container').innerHTML = contents;
+      }catch(err){
+        alert('SVG parse error');
+        console.error(err);
       }
-      await refreshRiderPanel();
-      await refreshLogs();
-    })();
+    };
+    reader.readAsText(f);
+  });
+
+  // Clicking the logo also opens file upload (UX)
+  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());
+
+  /**************************************************************************
+   * ========================= UTIL: Page unload cleanup ====================
+   **************************************************************************/
+  window.addEventListener('beforeunload', ()=>{
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+  });
+
+  /**************************************************************************
+   * ========================= INITIAL SIMPLE SETUP =========================
+   * Try to load logs once if the user is already signed in
+   **************************************************************************/
+  (async ()=>{
+    // nothing to do here beyond what onAuthStateChanged handles.
+  })();
+
   </script>
-
-  <!-- =============================================================
-       NOTES: SECURITY RULES (FireStore) — demo-only baseline
-       Use the Firebase Console → Build → Firestore Database → Rules
-
-       WARNING: These permissive rules are ONLY for initial testing.
-       Replace with proper authenticated rules before production.
-
-       rules_version = '2';
-       service cloud.firestore {
-         match /databases/{database}/documents {
-           match /{document=**} {
-             allow read, write: if true; // DEMO ONLY
-           }
-         }
-       }
-
-       For production, prefer using Firebase Auth and role-based access.
-       ============================================================= -->
 </body>
 </html>
