@@ -1,168 +1,167 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YANA QR App</title>
-
-<!-- Manifest only when allowed -->
-<script>
-if (location.protocol === 'http:' || location.protocol === 'https:') {
-  const manifest = document.createElement('link');
-  manifest.rel = 'manifest';
-  manifest.href = 'manifest.json';
-  document.head.appendChild(manifest);
-} else {
-  console.warn("Skipping manifest.json in file:// mode");
-}
-</script>
-
-<style>
-body { font-family: Arial, sans-serif; padding: 20px; }
-#log { border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; margin-top: 10px; }
-input, button { margin: 5px 0; padding: 8px; }
-video { width: 100%; max-width: 400px; margin-top: 10px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YANA QR</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: white;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #FFD700;
+      padding: 15px;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: black;
+    }
+    .container {
+      max-width: 400px;
+      margin: auto;
+      padding: 20px;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 5px;
+      font-size: 1em;
+    }
+    input {
+      background: white;
+      color: black;
+    }
+    button {
+      background-color: #FFD700;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    #reader {
+      width: 100%;
+      margin-top: 20px;
+    }
+    .result {
+      margin-top: 15px;
+      padding: 10px;
+      background: #111;
+      border-radius: 5px;
+      word-break: break-word;
+    }
+    a {
+      color: #FFD700;
+      text-decoration: underline;
+    }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
+  <header>YANA QR</header>
+  <div class="container">
+    <input type="email" id="email" placeholder="Enter Email" />
+    <input type="password" id="password" placeholder="Enter Password" />
+    <button id="signin">Sign In</button>
+    <button id="signout" style="display:none;">Sign Out</button>
+    <button id="start-scan" style="display:none;">Start Scan</button>
+    <div id="reader" style="display:none;"></div>
+    <div id="result" class="result"></div>
+  </div>
 
-<h2>YANA QR App</h2>
+  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+      authDomain: "yana-qr.firebaseapp.com",
+      projectId: "yana-qr",
+      storageBucket: "yana-qr.firebasestorage.app",
+      messagingSenderId: "905613005387",
+      appId: "1:905613005387:web:b0d8464d826972654b73ce",
+      measurementId: "G-9P9DLJGQHQ"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-<input type="email" id="email" placeholder="Email"><br>
-<input type="password" id="password" placeholder="Password"><br>
-<button id="btnRegister">Register</button>
-<button id="btnSignIn">Sign In</button>
-<button id="btnSignOut">Sign Out</button>
+    const signinBtn = document.getElementById('signin');
+    const signoutBtn = document.getElementById('signout');
+    const startScanBtn = document.getElementById('start-scan');
+    const readerDiv = document.getElementById('reader');
+    const resultDiv = document.getElementById('result');
 
-<h3>QR Scanner</h3>
-<video id="preview"></video>
-<button id="btnScan">Start Scan</button>
+    // Auto-register if login fails
+    signinBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value;
+      const pass = document.getElementById('password').value;
+      try {
+        await auth.signInWithEmailAndPassword(email, pass);
+      } catch (err) {
+        if (err.code === 'auth/invalid-login-credentials' || err.code === 'auth/user-not-found') {
+          await auth.createUserWithEmailAndPassword(email, pass);
+        } else {
+          alert(err.message);
+        }
+      }
+    });
 
-<div id="log"></div>
+    // Sign out
+    signoutBtn.addEventListener('click', async () => {
+      await auth.signOut();
+    });
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
+    // Auth state listener
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        signinBtn.style.display = 'none';
+        signoutBtn.style.display = 'block';
+        startScanBtn.style.display = 'block';
+      } else {
+        signinBtn.style.display = 'block';
+        signoutBtn.style.display = 'none';
+        startScanBtn.style.display = 'none';
+        readerDiv.style.display = 'none';
+      }
+    });
 
-<!-- QR Scanner -->
-<script src="https://unpkg.com/html5-qrcode"></script>
-
-<script>
-// Firebase Config
-const firebaseConfig = {
-  apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
-  authDomain: "yana-qr.firebaseapp.com",
-  projectId: "yana-qr",
-  storageBucket: "yana-qr.firebasestorage.app",
-  messagingSenderId: "905613005387",
-  appId: "1:905613005387:web:b0d8464d826972654b73ce",
-  measurementId: "G-9P9DLJGQHQ"
-};
-
-let auth, db, currentUser;
-
-// Init Firebase only for http/https
-if (location.protocol === 'http:' || location.protocol === 'https:') {
-  const app = firebase.initializeApp(firebaseConfig);
-  auth = firebase.auth();
-  db = firebase.firestore();
-} else {
-  console.warn("Firebase init skipped in file:// mode");
-}
-
-function log(msg, type='info') {
-  const logBox = document.getElementById('log');
-  const div = document.createElement('div');
-  div.innerHTML = msg;
-  div.style.color = type === 'err' ? 'red' : (type === 'ok' ? 'green' : 'black');
-  logBox.appendChild(div);
-  logBox.scrollTop = logBox.scrollHeight;
-}
-
-// Register
-document.getElementById('btnRegister').onclick = async () => {
-  try {
-    const email = emailInput.value.trim();
-    const pass = passwordInput.value;
-    const cred = await auth.createUserWithEmailAndPassword(email, pass);
-    currentUser = cred.user;
-    log(`✅ Registered: ${currentUser.email}`, 'ok');
-  } catch (e) {
-    log(`❌ ${e.message}`, 'err');
-  }
-};
-
-// Sign In
-document.getElementById('btnSignIn').onclick = async () => {
-  try {
-    const email = emailInput.value.trim();
-    const pass = passwordInput.value;
-    const cred = await auth.signInWithEmailAndPassword(email, pass);
-    currentUser = cred.user;
-    log(`🔐 Signed in as ${currentUser.email}`, 'ok');
-  } catch (e) {
-    log(`❌ ${e.message}`, 'err');
-  }
-};
-
-// Sign Out
-document.getElementById('btnSignOut').onclick = async () => {
-  await auth.signOut();
-  currentUser = null;
-  log("🚪 Signed out", 'ok');
-};
-
-// QR Scan
-document.getElementById('btnScan').onclick = () => {
-  if (!currentUser) return log("Sign in first!", 'err');
-
-  const html5QrCode = new Html5Qrcode("preview");
-  Html5Qrcode.getCameras().then(cameras => {
-    if (cameras && cameras.length) {
+    // Start QR scanning
+    startScanBtn.addEventListener('click', () => {
+      readerDiv.style.display = 'block';
+      const html5QrCode = new Html5Qrcode("reader");
       html5QrCode.start(
-        cameras[0].id,
+        { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
-        async qrCodeMessage => {
-          log(`📷 Scanned: ${qrCodeMessage}`, 'ok');
-          await handleScan(qrCodeMessage);
+        async (decodedText) => {
           html5QrCode.stop();
-        },
-        error => {}
-      );
-    }
-  }).catch(err => log(err, 'err'));
-};
+          let displayText = decodedText;
+          if (decodedText.startsWith("http://") || decodedText.startsWith("https://")) {
+            displayText = `<a href="${decodedText}" target="_blank">${decodedText}</a>`;
+          }
+          resultDiv.innerHTML = "Scanned: " + displayText;
 
-// Handle scan (register/deregister)
-async function handleScan(code) {
-  const docRef = db.collection("registrations").doc(code);
-  const docSnap = await docRef.get();
-
-  if (!docSnap.exists) {
-    // Register
-    await docRef.set({
-      type: code.toLowerCase().includes("battery") ? "battery" : "scooter",
-      assignedTo: currentUser.email,
-      timestamp: new Date(),
-      action: "registered"
+          // Save to Firestore
+          const user = auth.currentUser;
+          if (user) {
+            await db.collection("scans").add({
+              uid: user.uid,
+              email: user.email,
+              data: decodedText,
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        }
+      ).catch(err => alert("Camera Error: " + err));
     });
-    log(`✅ Registered ${code} to ${currentUser.email}`, 'ok');
-  } else {
-    // Deregister
-    await docRef.delete();
-    log(`🗑️ Deregistered ${code}`, 'ok');
-
-    // Log history
-    await db.collection("logs").add({
-      code,
-      action: "deregistered",
-      by: currentUser.email,
-      timestamp: new Date()
-    });
-  }
-}
-</script>
-
+  </script>
 </body>
 </html>
