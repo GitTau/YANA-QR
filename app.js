@@ -115,7 +115,25 @@ function startScanner(){
   html5QrCode = new Html5Qrcode("qr-reader");
   const config = { fps: 10, qrbox: 250 };
 
-  html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+  Html5Qrcode.getCameras()
+    .then(cameras => {
+      if (cameras && cameras.length) {
+        // pick back camera if available, else first camera
+        let cameraId = cameras.length > 1 ? cameras[1].id : cameras[0].id;
+        html5QrCode.start(cameraId, config, onScanSuccess)
+          .catch(err => {
+            console.error("QR start failed", err);
+            firestoreStatus.textContent = "QR Scanner failed to start: " + err;
+          });
+      } else {
+        firestoreStatus.textContent = "No cameras found.";
+      }
+    })
+    .catch(err => {
+      console.error("Camera access error", err);
+      firestoreStatus.textContent = "Camera error: " + err;
+    });
+}
 }
 
 function stopScanner(){
