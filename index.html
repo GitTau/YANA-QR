@@ -1,48 +1,650 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Device Manager</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Yana QR — Rider Register</title>
+
+  <!-- ========= STYLES ========= -->
+  <style>
+    /* Theme: dark-blue background + action color #00eaff */
+    :root{
+      --bg: #001826;         /* dark navy */
+      --action: #00eaff;     /* action cyan */
+      --card: #042634;
+      --muted: #8fb6bf;
+      --text: #e6f7fb;
+      --danger: #ff6b6b;
+      --success: #6ef0a0;
+      --glass: rgba(255,255,255,0.04);
+      --radius: 12px;
+      --pad: 14px;
+      --maxw: 880px;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,var(--bg), #00121a 120%);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .wrap{
+      max-width:var(--maxw);
+      margin:24px auto;
+      padding:18px;
+    }
+
+    header{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:16px;
+    }
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .logo{
+      width:56px;
+      height:56px;
+      border-radius:12px;
+      background:linear-gradient(135deg,var(--action),#007ea7);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      color:#002;
+      box-shadow:0 6px 18px rgba(0,0,0,0.6);
+    }
+    h1{ margin:0; font-size:18px;}
+    p.lead{ margin:0; color:var(--muted); font-size:13px; }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius: var(--radius);
+      padding:var(--pad);
+      box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+      margin-bottom:12px;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+
+    .row{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .col{ flex:1; min-width:220px; }
+
+    button.btn{
+      background:var(--action);
+      color:#002;
+      border:0;
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:700;
+      cursor:pointer;
+      box-shadow:0 8px 18px rgba(0,0,0,0.35);
+    }
+    button.ghost{
+      background:transparent;
+      border:1px solid rgba(255,255,255,0.06);
+      color:var(--text);
+      padding:8px 12px;
+      border-radius:10px;
+      cursor:pointer;
+    }
+    .muted{ color:var(--muted); font-size:13px; }
+
+    /* scanner area */
+    #scanner { width:100%; max-width:560px; margin:12px auto 6px; border-radius:10px; overflow:hidden; }
+
+    /* responsive */
+    @media (max-width:720px){
+      .row{ flex-direction:column; }
+      header{flex-direction:column; align-items:flex-start; gap:10px;}
+      .brand{gap:10px;}
+    }
+
+    /* small table */
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td{ text-align:left; padding:8px 6px; border-bottom:1px dashed rgba(255,255,255,0.02); }
+    th{ color:var(--muted); font-weight:600; font-size:12px; }
+    .chip{ display:inline-block; padding:6px 8px; border-radius:999px; background:var(--glass); color:var(--muted); font-size:12px; }
+    .danger{ color:var(--danger); font-weight:700; }
+    .ok{ color:var(--success); font-weight:700; }
+    .center{ text-align:center; }
+    .small{ font-size:12px; color:var(--muted); }
+  </style>
 </head>
 <body>
-  <header>
-    <div id="logo-container">
-      <svg id="app-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="45" stroke="black" stroke-width="5" fill="lightblue"/>
-        <text x="50%" y="55%" text-anchor="middle" font-size="20" fill="black">LOGO</text>
-      </svg>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">Y</div>
+        <div>
+          <h1>Yana QR — Rider Register</h1>
+          <p class="lead">Quickly assign / unassign scooters & batteries with QR scans</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <div id="userArea" class="card small center" style="min-width:220px;">
+          <div id="signedOutUI">
+            <div class="muted">Not signed in</div>
+            <div style="margin-top:8px;">
+              <button id="btnGoogle" class="btn">Sign in with Google</button>
+            </div>
+            <div class="small" style="margin-top:8px;">(Firebase Google Sign-In)</div>
+          </div>
+
+          <div id="signedInUI" style="display:none;">
+            <div id="uName" style="font-weight:700;"></div>
+            <div id="uEmail" class="muted"></div>
+            <div style="margin-top:8px;">
+              <button id="btnSignOut" class="ghost">Sign out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </header>
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="row" style="align-items:center;">
+        <div class="col">
+          <label class="muted">Select scan type</label>
+          <div style="margin-top:8px;">
+            <select id="scanType" style="padding:10px;border-radius:10px;background:transparent;color:var(--text);border:1px solid rgba(255,255,255,0.04);min-width:160px;">
+              <option value="scooter">Scooter</option>
+              <option value="battery">Battery</option>
+            </select>
+            <button id="btnStartScan" class="btn" style="margin-left:8px;">Start Camera Scan</button>
+            <button id="btnStopScan" class="ghost" style="margin-left:6px;">Stop</button>
+            <button id="btnPickImage" class="ghost" style="margin-left:6px;">Scan From Image</button>
+            <input id="fileInput" type="file" accept="image/*" style="display:none;">
+          </div>
+          <div class="small" style="margin-top:8px;">Tip: If QR codes are plain numbers (like SC001 or BATT001) they will be used as IDs directly.</div>
+        </div>
+
+        <div class="col" style="min-width:260px;">
+          <label class="muted">Current rider assignment</label>
+          <div style="margin-top:8px;" id="statusCard" class="card">
+            <div id="statusContent" class="small muted">Sign in to see your assigned scooter and battery.</div>
+          </div>
+        </div>
+
+      </div>
     </div>
-    <input type="file" id="logo-upload" accept=".svg">
-    <button id="google-signin">Sign in with Google</button>
-    <button id="google-signout" style="display:none;">Sign out</button>
-  </header>
 
-  <main>
-    <section id="scanner-section">
-      <h2>QR Code Scanner</h2>
-      <video id="video" autoplay></video>
-      <canvas id="canvas" hidden></canvas>
-    </section>
+    <!-- scanner display -->
+    <div id="scanner" class="card center" style="display:none;">
+      <div id="reader" style="width:100%;"></div>
+      <div id="scanResult" class="small muted" style="margin-top:8px;"></div>
+    </div>
 
-    <section id="devices-section">
-      <h2>Linked Devices</h2>
-      <ul id="device-list"></ul>
-    </section>
+    <!-- Logs & DB viewer -->
+    <div class="card">
+      <div class="row" style="align-items:flex-start;">
+        <div class="col">
+          <h3 style="margin:0 0 8px 0;">Recent Logs</h3>
+          <div id="logsArea" class="small muted">No logs yet.</div>
+        </div>
 
-    <section id="logs-section">
-      <h2>Activity Logs</h2>
-      <ul id="log-list"></ul>
-    </section>
-  </main>
+        <div class="col">
+          <h3 style="margin:0 0 8px 0;">Current Assignments</h3>
+          <div id="assignArea" class="small muted">Not loaded</div>
+        </div>
+      </div>
+    </div>
 
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js"></script>
-  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
-  <script src="app.js"></script>
+    <footer class="small muted" style="margin-top:8px;">
+      Built for Yana • Colors: action <span class="chip">#00eaff</span>
+    </footer>
+  </div>
+
+  <!-- ========= SCRIPTS ========= -->
+  <!-- html5-qrcode scanner library (camera + image scanning) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+
+  <!-- Firebase compat SDKs (simple to use in single-file apps) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+  <script>
+  /************************************************************************
+   * YANA QR - Single file webapp
+   * Sections:
+   *  1. Firebase initialization (config provided by user)
+   *  2. Auth functions: signInWithGoogle, signOut, auth state listener
+   *  3. Firestore functions: read/write riders/scooters/batteries/logs
+   *  4. QR scanner integration (html5-qrcode) and handlers
+   *  5. UI helpers and rendering functions
+   *
+   * Read code comments for each function. Deploy notes at the end of this file.
+   ************************************************************************/
+
+  /***********************
+   * 1) Firebase init
+   ***********************/
+  const firebaseConfig = {
+    apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+    authDomain: "yana-qr.firebaseapp.com",
+    projectId: "yana-qr",
+    storageBucket: "yana-qr.firebasestorage.app",
+    messagingSenderId: "905613005387",
+    appId: "1:905613005387:web:b0d8464d826972654b73ce",
+    measurementId: "G-9P9DLJGQHQ"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  /***********************
+   * 2) Auth functions
+   ***********************/
+  const btnGoogle = document.getElementById('btnGoogle');
+  const btnSignOut = document.getElementById('btnSignOut');
+
+  btnGoogle.onclick = async () => {
+    // One-tap look: using Google provider popup. If you want full Google One Tap, enable separately via Google Identity Services.
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {
+      await auth.signInWithPopup(provider);
+      // post-sign in handled by auth.onAuthStateChanged
+    } catch (err) {
+      alert('Sign-in error: ' + err.message);
+      console.error(err);
+    }
+  };
+
+  btnSignOut.onclick = () => auth.signOut();
+
+  // Listen for auth state change
+  auth.onAuthStateChanged(async user => {
+    const signedInUI = document.getElementById('signedInUI');
+    const signedOutUI = document.getElementById('signedOutUI');
+    if (user) {
+      // Show user info
+      signedOutUI.style.display = 'none';
+      signedInUI.style.display = 'block';
+      document.getElementById('uName').innerText = user.displayName || 'Rider';
+      document.getElementById('uEmail').innerText = user.email;
+
+      // Ensure rider doc exists
+      await ensureRiderDoc(user);
+      // render status
+      await renderStatus(user);
+      // render logs & assignments
+      await loadRecentLogs();
+      await loadAssignments();
+    } else {
+      signedOutUI.style.display = 'block';
+      signedInUI.style.display = 'none';
+      document.getElementById('statusContent').innerText = 'Sign in to see your assigned scooter and battery.';
+      document.getElementById('logsArea').innerText = 'No logs yet.';
+      document.getElementById('assignArea').innerText = 'Not loaded';
+    }
+  });
+
+  /***********************
+   * 3) Firestore helpers
+   ***********************/
+
+  // Ensure a rider document exists for this user
+  async function ensureRiderDoc(user){
+    const rRef = db.collection('riders').doc(user.uid);
+    const snap = await rRef.get();
+    if (!snap.exists) {
+      await rRef.set({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || '',
+        linkedScooter: null,
+        linkedBattery: null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  }
+
+  // Add a log entry
+  async function addLog({ action, type, id, riderUid, riderEmail, note='' }){
+    await db.collection('logs').add({
+      action, // 'assign' | 'deregister' | 'error'
+      type,   // 'scooter' | 'battery'
+      id,     // scanned id
+      riderUid,
+      riderEmail,
+      note,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  // Assign item (scooter/battery) to rider
+  async function assignItem({ user, type, id }){
+    const riderRef = db.collection('riders').doc(user.uid);
+    const itemCol = type === 'scooter' ? 'scooters' : 'batteries';
+    const itemRef = db.collection(itemCol).doc(id);
+
+    // transaction to ensure atomic
+    try{
+      await db.runTransaction(async tx => {
+        const riderSnap = await tx.get(riderRef);
+        const itemSnap = await tx.get(itemRef);
+
+        const riderData = riderSnap.data();
+        const currentLinked = type === 'scooter' ? riderData.linkedScooter : riderData.linkedBattery;
+
+        // 1) If rider already linked same id -> deregister (handled outside), so here we assume assign only when currentLinked null
+        if (currentLinked) {
+          throw new Error(`You already have a ${type} linked (${currentLinked}). Please deregister first.`);
+        }
+
+        // 2) If item exists and assignedTo -> error
+        if (itemSnap.exists && itemSnap.data().assignedTo) {
+          throw new Error(`${type} ${id} is already assigned to someone else.`);
+        }
+
+        // 3) Assign: set rider field and item.assignedTo
+        const update = {};
+        if (type === 'scooter') update.linkedScooter = id; else update.linkedBattery = id;
+        tx.update(riderRef, update);
+        tx.set(itemRef, { id, assignedTo: user.uid, assignedEmail: user.email, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+      });
+
+      await addLog({ action: 'assign', type, id, riderUid: user.uid, riderEmail: user.email });
+      return { ok:true };
+    } catch(err){
+      // save error log
+      await addLog({ action: 'error', type, id, riderUid: user.uid, riderEmail: user.email, note: err.message });
+      return { ok:false, error: err.message };
+    }
+  }
+
+  // Deregister / unassign item
+  async function deregisterItem({ user, type, id }){
+    const riderRef = db.collection('riders').doc(user.uid);
+    const itemCol = type === 'scooter' ? 'scooters' : 'batteries';
+    const itemRef = db.collection(itemCol).doc(id);
+
+    try{
+      await db.runTransaction(async tx => {
+        const riderSnap = await tx.get(riderRef);
+        const itemSnap = await tx.get(itemRef);
+
+        const riderData = riderSnap.data();
+        const currentLinked = type === 'scooter' ? riderData.linkedScooter : riderData.linkedBattery;
+
+        // Only allow deregister if rider actually owns it
+        if (!currentLinked || currentLinked !== id) {
+          throw new Error(`You are not linked to ${type} ${id}. Cannot deregister.`);
+        }
+
+        // Clear rider field and item.assignedTo
+        const update = {};
+        if (type === 'scooter') update.linkedScooter = null; else update.linkedBattery = null;
+        tx.update(riderRef, update);
+        tx.set(itemRef, { assignedTo: null, assignedEmail: null, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      });
+
+      await addLog({ action: 'deregister', type, id, riderUid: user.uid, riderEmail: user.email });
+      return { ok:true };
+    } catch(err){
+      await addLog({ action: 'error', type, id, riderUid: user.uid, riderEmail: user.email, note: err.message });
+      return { ok:false, error: err.message };
+    }
+  }
+
+  /***********************
+   * 4) QR Scanner integration
+   * Using html5-qrcode library (camera & image)
+   ***********************/
+  let html5QrcodeScanner = null;
+  let activeScanType = 'scooter'; // default
+  const scannerDiv = document.getElementById('scanner');
+  const readerDiv = document.getElementById('reader');
+  const scanResult = document.getElementById('scanResult');
+  const btnStartScan = document.getElementById('btnStartScan');
+  const btnStopScan = document.getElementById('btnStopScan');
+  const btnPickImage = document.getElementById('btnPickImage');
+  const fileInput = document.getElementById('fileInput');
+  const scanTypeSelect = document.getElementById('scanType');
+
+  scanTypeSelect.addEventListener('change', ()=> activeScanType = scanTypeSelect.value);
+
+  btnStartScan.addEventListener('click', async ()=> {
+    if (!auth.currentUser) { alert('Sign in first'); return; }
+    startCameraScan();
+  });
+
+  btnStopScan.addEventListener('click', ()=> stopCameraScan());
+
+  btnPickImage.addEventListener('click', ()=> fileInput.click());
+
+  fileInput.addEventListener('change', async (ev)=> {
+    if (!auth.currentUser) { alert('Sign in first'); ev.target.value=''; return; }
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      // use html5-qrcode's scanFile
+      scanResult.innerText = 'Scanning image...';
+      const html5Qr = new Html5Qrcode("reader", { verbose: false });
+      const result = await html5Qr.scanFile(file, true);
+      await handleScanResult(result);
+      html5Qr.clear();
+    } catch(err){
+      console.error(err);
+      alert('No QR found in image or scan failed.');
+    } finally {
+      ev.target.value = '';
+    }
+  });
+
+  async function startCameraScan(){
+    // Request camera permission and start scanning
+    scannerDiv.style.display = 'block';
+    scanResult.innerText = 'Starting camera...';
+    if (html5QrcodeScanner) {
+      // already started
+      return;
+    }
+    html5QrcodeScanner = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: { width: 300, height: 200 } };
+
+    try {
+      // Ask for camera; the library will prompt the user for permission
+      await html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        config,
+        async (decodedText, decodedResult) => {
+          // Callback when QR code is detected
+          await handleScanResult(decodedText);
+        },
+        (errorMessage) => {
+          // optional: scan failure callback per frame
+          // console.log('scan frame error', errorMessage);
+        }
+      );
+      scanResult.innerText = 'Scanning... (point camera at QR)';
+    } catch(err){
+      console.error(err);
+      scanResult.innerText = 'Camera start error: ' + (err.message || err);
+      alert('Camera permission denied or not available.');
+      scannerDiv.style.display = 'none';
+      html5QrcodeScanner = null;
+    }
+  }
+
+  function stopCameraScan(){
+    if (!html5QrcodeScanner) return;
+    html5QrcodeScanner.stop().then(() => {
+      html5QrcodeScanner.clear();
+      html5QrcodeScanner = null;
+      scannerDiv.style.display = 'none';
+      scanResult.innerText = '';
+    }).catch(err => {
+      console.warn('stop error', err);
+    });
+  }
+
+  /***********************
+   * 5) Scan result handling
+   ***********************/
+  async function handleScanResult(decodedText){
+    /* decodedText is the raw string from QR.
+       We treat that string as the ID for scooter/battery.
+       User preselects whether scanning scooter or battery via dropdown.
+    */
+    const user = auth.currentUser;
+    if (!user) { alert('Please sign in first'); return; }
+
+    const type = activeScanType; // 'scooter' or 'battery'
+    const id = ('' + decodedText).trim();
+
+    scanResult.innerText = `Scanned ${type}: ${id}`;
+
+    // Fetch rider doc
+    const riderRef = db.collection('riders').doc(user.uid);
+    const riderSnap = await riderRef.get();
+    if (!riderSnap.exists) {
+      alert('Rider profile missing. Try signing out and in again.');
+      return;
+    }
+    const rider = riderSnap.data();
+    const currentLinked = type === 'scooter' ? rider.linkedScooter : rider.linkedBattery;
+
+    // If rider scans same ID they're already linked to -> deregister
+    if (currentLinked && currentLinked === id) {
+      const confirmed = confirm(`You are currently linked to ${type} ${id}. Do you want to deregister it?`);
+      if (!confirmed) return;
+      const res = await deregisterItem({ user, type, id });
+      if (res.ok) {
+        alert(`${type} ${id} deregistered successfully.`);
+      } else {
+        alert(`Error: ${res.error}`);
+      }
+      await renderStatus(user);
+      await loadRecentLogs();
+      await loadAssignments();
+      return;
+    }
+
+    // If rider has a different item linked -> error (must deregister first)
+    if (currentLinked && currentLinked !== id) {
+      alert(`You already have a ${type} linked (${currentLinked}). Please deregister it before assigning a new ${type}.`);
+      await addLog({ action: 'error', type, id, riderUid: user.uid, riderEmail: user.email, note: 'Tried to assign new without deregistering' });
+      return;
+    }
+
+    // Else try to assign
+    const assignRes = await assignItem({ user, type, id });
+    if (assignRes.ok) {
+      alert(`${type} ${id} assigned to you successfully.`);
+    } else {
+      alert('Assignment failed: ' + assignRes.error);
+    }
+    await renderStatus(user);
+    await loadRecentLogs();
+    await loadAssignments();
+  }
+
+  /***********************
+   * 6) UI renderers: status, logs, assignments
+   ***********************/
+  async function renderStatus(user){
+    const r = await db.collection('riders').doc(user.uid).get();
+    if (!r.exists) {
+      document.getElementById('statusContent').innerText = 'No rider data.';
+      return;
+    }
+    const data = r.data();
+    const sc = data.linkedScooter ? `<div><strong>Scooter:</strong> ${data.linkedScooter}</div>` : `<div class="muted">No scooter linked</div>`;
+    const bt = data.linkedBattery ? `<div><strong>Battery:</strong> ${data.linkedBattery}</div>` : `<div class="muted">No battery linked</div>`;
+    document.getElementById('statusContent').innerHTML = `<div style="font-size:14px;font-weight:700;">${data.displayName || data.email}</div>${sc}${bt}<div class="small muted" style="margin-top:8px;">Last updated: ${data.updatedAt ? new Date(data.updatedAt?.toDate()).toLocaleString() : '—'}</div>`;
+  }
+
+  // Load recent logs (last 20)
+  async function loadRecentLogs(){
+    const q = await db.collection('logs').orderBy('ts','desc').limit(20).get();
+    if (q.empty) {
+      document.getElementById('logsArea').innerText = 'No logs yet.';
+      return;
+    }
+    let html = `<table><thead><tr><th>Time</th><th>Action</th><th>Type</th><th>ID</th><th>Rider</th></tr></thead><tbody>`;
+    q.forEach(doc => {
+      const d = doc.data();
+      const time = d.ts ? (new Date(d.ts.toDate())).toLocaleString() : '';
+      html += `<tr><td class="small">${time}</td><td>${d.action}</td><td>${d.type}</td><td>${d.id}</td><td class="small">${d.riderEmail || d.riderUid}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+    document.getElementById('logsArea').innerHTML = html;
+  }
+
+  // Load current assignments summary
+  async function loadAssignments(){
+    // Show top 50 assigned scooters & batteries
+    const s = await db.collection('scooters').where('assignedTo','!=', null).limit(50).get();
+    const b = await db.collection('batteries').where('assignedTo','!=', null).limit(50).get();
+
+    let html = '';
+    html += '<div style="margin-bottom:8px;"><strong>Scooters assigned</strong></div>';
+    if (s.empty) html += '<div class="muted small">None</div>'; else {
+      html += '<table><tbody>';
+      s.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${d.id}</td><td class="small">${d.assignedEmail || d.assignedTo}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    html += '<div style="margin-top:10px;"><strong>Batteries assigned</strong></div>';
+    if (b.empty) html += '<div class="muted small">None</div>'; else {
+      html += '<table><tbody>';
+      b.forEach(doc => {
+        const d = doc.data();
+        html += `<tr><td>${d.id}</td><td class="small">${d.assignedEmail || d.assignedTo}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    document.getElementById('assignArea').innerHTML = html;
+  }
+
+  /***********************
+   * 7) Initial small helpers
+   ***********************/
+  // Poll recent logs every 15s when signed in
+  let logsPollInterval = null;
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      if (logsPollInterval) clearInterval(logsPollInterval);
+      logsPollInterval = setInterval(()=> {
+        loadRecentLogs(); loadAssignments();
+      }, 15000);
+    } else {
+      if (logsPollInterval) { clearInterval(logsPollInterval); logsPollInterval = null; }
+    }
+  });
+
+  // Also load once at start (if already signed in)
+  if (auth.currentUser) {
+    ensureRiderDoc(auth.currentUser).then(()=> { renderStatus(auth.currentUser); loadRecentLogs(); loadAssignments(); });
+  }
+
+  /************************************************************************
+   * END OF APP CODE
+   ************************************************************************/
+
+  </script>
+
+  <!-- ========== END ========== -->
 </body>
 </html>
-
