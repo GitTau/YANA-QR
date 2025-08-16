@@ -63,7 +63,17 @@
     .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
     
 
-     /* device info & logs */
+     <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
+     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
+     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
+     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
+     <button id="startCamBtn" class="action-btn">Start Scanner</button>
+     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
+     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
+
+
+
+    /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
     .log-list{max-height:380px;overflow:auto;margin-top:8px;padding-right:8px}
     .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
@@ -83,15 +93,20 @@
   <div class="container">
     <!-- HEADER: logo, brand, signin, svg upload -->
     <header>
-    <img src="logo.svg" alt="App Logo" class="applogo">
-    <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
-     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
-     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
-     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
-     <button id="startCamBtn" class="action-btn">Start Scanner</button>
-     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
-     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
-  </div>
+    <img src="logo.svg" alt="App Logo" class="app-logo">
+
+      <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
+        <!-- default inline SVG logo (replaceable) -->
+            .app-logo {
+             width: 10px;
+             height: auto;
+             display: block;
+             margin: 0 auto;
+    }
+          <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
+          <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
 
       <div>
         <div class="brand">Yana — Rider QR</div>
@@ -149,7 +164,13 @@
 
       <!-- RIGHT: summary, device status, logs, upload logo -->
       <aside class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
+    .app-logo {
+    width: 150px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    }
+        <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:700">Rider & Devices</div>
           <div class="muted small">Realtime DB: Firestore</div>
         </div>
@@ -568,7 +589,33 @@
   // helper to escape HTML
   function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-    
+  /**************************************************************************
+   * ========================= SVG UPLOAD (logo change) =====================
+   * Allows upload of an SVG file and replaces inline logo preview and main SVG.
+   **************************************************************************/
+  svgUpload.addEventListener('change', (ev)=>{
+    const f = ev.target.files[0];
+    if(!f) return;
+    if(!f.name.toLowerCase().endsWith('.svg')) return alert('Please upload an SVG file only.');
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const contents = e.target.result;
+      // simple safety: replace the innerHTML of the preview and main logo
+      try{
+        svgPreview.innerHTML = contents;
+        // update main header logo too (if safe)
+        document.getElementById('logo-container').innerHTML = contents;
+      }catch(err){
+        alert('SVG parse error');
+        console.error(err);
+      }
+    };
+    reader.readAsText(f);
+  });
+
+  // Clicking the logo also opens file upload (UX)
+  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());
+
   /**************************************************************************
    * ========================= UTIL: Page unload cleanup ====================
    **************************************************************************/
@@ -587,3 +634,5 @@
   </script>
 </body>
 </html>
+
+            
