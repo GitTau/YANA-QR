@@ -1,71 +1,71 @@
-:root{
-  --bg:#0f1724;
-  --card:#0b1220;
-  --text:#e6eef8;
-  --muted:#9fb0c9;
-  --accent:#00eaff;
-  --glass: rgba(255,255,255,0.03);
-  --radius: 12px;
-  --pad: 18px;
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #f4f6f8;
+  color: #333;
 }
 
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;
-  background:linear-gradient(180deg,#071126 0%, #0b1b2b 100%);
-  color:var(--text);
-  font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:24px;
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #007bff;
+  color: white;
+  padding: 10px 20px;
 }
 
-.container{
-  width:100%;
-  max-width:720px;
-  background:var(--card);
-  border-radius:16px;
-  padding:28px;
-  box-shadow: 0 8px 30px rgba(2,6,23,0.6);
-  border: 1px solid rgba(255,255,255,0.03);
+#logo-container {
+  width: 80px;
+  height: 80px;
 }
 
-.header{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  margin-bottom:18px;
+#app-logo {
+  width: 100%;
+  height: 100%;
 }
 
-.logo{
-  width:42px;
-  height:42px;
+button {
+  margin: 5px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: white;
+  color: #007bff;
+  font-weight: bold;
 }
 
-h1{margin:0;font-size:20px}
-.card{
-  background:var(--glass);
-  padding:var(--pad);
-  border-radius:var(--radius);
-  margin-top:12px;
-  border:1px solid rgba(255,255,255,0.03);
+main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 20px;
 }
 
-.btn{
-  background:transparent;
-  border:1px solid var(--accent);
-  color:var(--accent);
-  padding:10px 14px;
-  border-radius:10px;
-  cursor:pointer;
-  font-weight:600;
-  margin-right:8px;
+section {
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-.btn:active{transform:translateY(1px)}
-.hidden{display:none}
+h2 {
+  margin-top: 0;
+}
 
-.muted{color:var(--muted); font-size:13px; margin-top:14px}
-.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; font-size:13px; background:rgba(255,255,255,0.02); padding:10px; border-radius:8px}
+video {
+  width: 100%;
+  border-radius: 10px;
+  border: 2px solid #007bff;
+}
+
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+li {
+  padding: 5px 0;
+  border-bottom: 1px solid #eee;
+}
