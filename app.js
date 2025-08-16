@@ -110,28 +110,34 @@ async function logAction(userEmail, assetType, assetId, action){
 /* --------------------------
    QR SCAN LOGIC
    -------------------------- */
-function startScanner(){
+function startScanner() {
   scannerSection.classList.remove("hidden");
   html5QrCode = new Html5Qrcode("qr-reader");
-  const config = { fps: 10, qrbox: 250 };
+  const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
   Html5Qrcode.getCameras()
     .then(cameras => {
       if (cameras && cameras.length) {
-        // pick back camera if available, else first camera
-        let cameraId = cameras.length > 1 ? cameras[1].id : cameras[0].id;
-        html5QrCode.start(cameraId, config, onScanSuccess)
-          .catch(err => {
-            console.error("QR start failed", err);
-            firestoreStatus.textContent = "QR Scanner failed to start: " + err;
-          });
+        let cameraId = cameras[0].id; // always pick first camera for now
+        html5QrCode.start(
+          cameraId,
+          config,
+          onScanSuccess,
+          (err) => { console.warn("QR scan error:", err); }
+        ).catch(err => {
+          console.error("QR start failed", err);
+          document.getElementById("firestoreStatus").textContent =
+            "QR Scanner failed: " + err;
+        });
       } else {
-        firestoreStatus.textContent = "No cameras found.";
+        document.getElementById("firestoreStatus").textContent =
+          "No cameras found.";
       }
     })
     .catch(err => {
       console.error("Camera access error", err);
-      firestoreStatus.textContent = "Camera error: " + err;
+      document.getElementById("firestoreStatus").textContent =
+        "Camera error: " + err;
     });
 }
 }
