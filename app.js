@@ -1,217 +1,135 @@
-/**
- * app.js
- * Yana MVP - QR Scan + Firestore
- * Features:
- *  - Google Sign-In
- *  - QR Scanner for scooters & batteries
- *  - Assign / Deregister logic
- *  - Firestore logs
- */
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-
-/* --------------------------
-   FIREBASE CONFIG
-   -------------------------- */
+// -------------------- Firebase Config --------------------
 const firebaseConfig = {
-  apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
-  authDomain: "yana-qr.firebaseapp.com",
-  projectId: "yana-qr",
-  storageBucket: "yana-qr.firebasestorage.app",
-  messagingSenderId: "905613005387",
-  appId: "1:905613005387:web:b0d8464d826972654b73ce",
-  measurementId: "G-9P9DLJGQHQ"
+  // 🔥 Replace with your own config
+apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+authDomain: "yana-qr.firebaseapp.com",
+projectId: "yana-qr",
+storageBucket: "yana-qr.firebasestorage.app",
+messagingSenderId: "905613005387",
+appId: "1:905613005387:web:b0d8464d826972654b73ce",
+measurementId: "G-9P9DLJGQHQ"
+
 };
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
+// -------------------- Auth --------------------
+const signInBtn = document.getElementById("google-signin");
+const signOutBtn = document.getElementById("google-signout");
 
-/* --------------------------
-   UI ELEMENTS
-   -------------------------- */
-const googleSignInBtn = document.getElementById('googleSignInBtn');
-const signOutBtn = document.getElementById('signOutBtn');
-const statusP = document.getElementById('status');
-const userInfo = document.getElementById('user-info');
-const userEmailP = document.getElementById('userEmail');
-const firestoreStatus = document.getElementById('firestoreStatus');
-const scannerSection = document.getElementById('scanner-section');
-const scanResult = document.getElementById('scanResult');
+signInBtn.addEventListener("click", () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider);
+});
+signOutBtn.addEventListener("click", () => auth.signOut());
 
-let currentUser = null;
-let html5QrCode;
-
-/* --------------------------
-   EVENT LISTENERS
-   -------------------------- */
-googleSignInBtn.addEventListener('click', () => signInWithGoogle());
-signOutBtn.addEventListener('click', () => signOutUser());
-
-/* --------------------------
-   AUTH FUNCTIONS
-   -------------------------- */
-async function signInWithGoogle(){
-  try {
-    const result = await signInWithPopup(auth, provider);
-    currentUser = result.user;
-    await ensureUserInFirestore(currentUser);
-    updateUIForSignedInUser(currentUser);
-    startScanner();
-  } catch (err) {
-    console.error(err);
-    statusP.textContent = "Sign-in failed.";
-  }
-}
-
-async function signOutUser(){
-  await signOut(auth);
-  currentUser = null;
-  stopScanner();
-  statusP.textContent = "Signed out";
-  userInfo.classList.add("hidden");
-  scannerSection.classList.add("hidden");
-  googleSignInBtn.classList.remove("hidden");
-  signOutBtn.classList.add("hidden");
-}
-
-/* --------------------------
-   FIRESTORE HELPERS
-   -------------------------- */
-async function ensureUserInFirestore(user){
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()){
-    await setDoc(ref, {
-      email: user.email,
-      assignedScooter: null,
-      assignedBattery: null,
-      createdAt: serverTimestamp()
-    });
-    firestoreStatus.textContent = "User created in Firestore.";
+auth.onAuthStateChanged(user => {
+  if (user) {
+    signInBtn.style.display = "none";
+    signOutBtn.style.display = "inline-block";
+    loadDevices(user.uid);
+    loadLogs(user.uid);
   } else {
-    firestoreStatus.textContent = "User exists in Firestore.";
+    signInBtn.style.display = "inline-block";
+    signOutBtn.style.display = "none";
+    document.getElementById("device-list").innerHTML = "";
+    document.getElementById("log-list").innerHTML = "";
+  }
+});
+
+// -------------------- QR Scanner --------------------
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+  .then(stream => { video.srcObject = stream; });
+
+video.addEventListener("play", () => {
+  const tick = () => {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code) processQRCode(code.data);
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
+});
+
+function processQRCode(data) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  let type = null;
+  let id = null;
+
+  if (data.startsWith("scooter:")) {
+    type = "scooter";
+    id = data.replace("scooter:", "");
+  } else if (data.startsWith("battery:")) {
+    type = "battery";
+    id = data.replace("battery:", "");
+  }
+
+  if (type && id) {
+    const deviceRef = db.collection("users").doc(user.uid).collection("devices").doc(id);
+    deviceRef.set({ type, linkedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    logActivity(user.uid, `${type} ${id} linked`);
   }
 }
 
-async function logAction(userEmail, assetType, assetId, action){
-  await addDoc(collection(db, "logs"), {
-    userEmail,
-    assetType,
-    assetId,
-    action,
-    timestamp: serverTimestamp()
+// -------------------- Firestore Sync --------------------
+function loadDevices(uid) {
+  db.collection("users").doc(uid).collection("devices")
+    .onSnapshot(snapshot => {
+      const list = document.getElementById("device-list");
+      list.innerHTML = "";
+      snapshot.forEach(doc => {
+        const li = document.createElement("li");
+        li.textContent = `${doc.data().type}: ${doc.id}`;
+        list.appendChild(li);
+      });
+    });
+}
+
+function loadLogs(uid) {
+  db.collection("users").doc(uid).collection("logs").orderBy("time", "desc")
+    .onSnapshot(snapshot => {
+      const list = document.getElementById("log-list");
+      list.innerHTML = "";
+      snapshot.forEach(doc => {
+        const li = document.createElement("li");
+        li.textContent = `${doc.data().time.toDate().toLocaleString()} - ${doc.data().message}`;
+        list.appendChild(li);
+      });
+    });
+}
+
+function logActivity(uid, message) {
+  db.collection("users").doc(uid).collection("logs").add({
+    message,
+    time: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
-/* --------------------------
-   QR SCAN LOGIC
-   -------------------------- */
-function startScanner() {
-  scannerSection.classList.remove("hidden");
-  html5QrCode = new Html5Qrcode("qr-reader");
-  const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+// -------------------- SVG Upload --------------------
+const logoUpload = document.getElementById("logo-upload");
+const logoContainer = document.getElementById("logo-container");
 
-  Html5Qrcode.getCameras()
-    .then(cameras => {
-      if (cameras && cameras.length) {
-        let cameraId = cameras[0].id; // always pick first camera for now
-        html5QrCode.start(
-          cameraId,
-          config,
-          onScanSuccess,
-          (err) => { console.warn("QR scan error:", err); }
-        ).catch(err => {
-          console.error("QR start failed", err);
-          document.getElementById("firestoreStatus").textContent =
-            "QR Scanner failed: " + err;
-        });
-      } else {
-        document.getElementById("firestoreStatus").textContent =
-          "No cameras found.";
-      }
-    })
-    .catch(err => {
-      console.error("Camera access error", err);
-      document.getElementById("firestoreStatus").textContent =
-        "Camera error: " + err;
-    });
-}
-}
-
-function stopScanner(){
-  if (html5QrCode){
-    html5QrCode.stop().catch(err => console.error("Stop scanner error", err));
-  }
-}
-
-async function onScanSuccess(decodedText){
-  scanResult.textContent = "Scanned: " + decodedText;
-
-  // Example format: scooter:123 or battery:456
-  let [type, id] = decodedText.split(":");
-  if (!type || !id) {
-    firestoreStatus.textContent = "Invalid QR format. Use scooter:ID or battery:ID";
-    return;
-  }
-
-  if (type !== "scooter" && type !== "battery"){
-    firestoreStatus.textContent = "Unknown asset type: " + type;
-    return;
-  }
-
-  await handleAssetScan(type, id);
-}
-
-async function handleAssetScan(assetType, assetId){
-  const userRef = doc(db, "users", currentUser.uid);
-  const userSnap = await getDoc(userRef);
-  let userData = userSnap.data();
-
-  const assignedField = assetType === "scooter" ? "assignedScooter" : "assignedBattery";
-
-  if (userData[assignedField] === assetId){
-    // Deregister
-    await updateDoc(userRef, { [assignedField]: null });
-    await logAction(userData.email, assetType, assetId, "deregister");
-    firestoreStatus.textContent = `${assetType} ${assetId} deregistered.`;
-  } else if (userData[assignedField] === null){
-    // Register
-    await updateDoc(userRef, { [assignedField]: assetId });
-    await logAction(userData.email, assetType, assetId, "register");
-    firestoreStatus.textContent = `${assetType} ${assetId} registered.`;
+logoUpload.addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (file && file.type === "image/svg+xml") {
+    const reader = new FileReader();
+    reader.onload = e => {
+      logoContainer.innerHTML = e.target.result; // Replace inline SVG
+    };
+    reader.readAsText(file);
   } else {
-    firestoreStatus.textContent = `You already have another ${assetType} assigned.`;
-  }
-}
-
-/* --------------------------
-   UI HELPERS
-   -------------------------- */
-function updateUIForSignedInUser(user){
-  userInfo.classList.remove("hidden");
-  googleSignInBtn.classList.add("hidden");
-  signOutBtn.classList.remove("hidden");
-  statusP.textContent = "Signed in";
-  userEmailP.textContent = user.email;
-  scannerSection.classList.remove("hidden");
-}
-
-/* --------------------------
-   MONITOR AUTH STATE
-   -------------------------- */
-onAuthStateChanged(auth, async (user) => {
-  if (user){
-    currentUser = user;
-    await ensureUserInFirestore(user);
-    updateUIForSignedInUser(user);
-    startScanner();
-  } else {
-    currentUser = null;
-    stopScanner();
-    statusP.textContent = "Not signed in";
+    alert("Please upload a valid SVG file.");
   }
 });
