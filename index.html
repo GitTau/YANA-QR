@@ -95,7 +95,7 @@
     <header>
     <img src="logo.svg" alt="App Logo" class="app-logo">
 
-
+      <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
         <!-- default inline SVG logo (replaceable) -->
             .app-logo {
              width: 10px;
@@ -164,7 +164,12 @@
 
       <!-- RIGHT: summary, device status, logs, upload logo -->
       <aside class="card">
-
+    .app-logo {
+    width: 150px;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    }
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:700">Rider & Devices</div>
           <div class="muted small">Realtime DB: Firestore</div>
