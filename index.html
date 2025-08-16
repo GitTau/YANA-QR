@@ -53,7 +53,7 @@
 
     /* two-column layout */
     .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
-    @media(max-width:960px){ .grid{grid-template-columns:1fr} .logo{width:56px;height:56px}}
+    @media(max-width:960px){ .grid{grid-template-columns:1fr} .logo{margin-right:auto}}
 
     /* scanner area */
     .scanner{
@@ -97,13 +97,6 @@
     <img src="logo.svg" alt="App Logo" class="app-logo">
 
       <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
-        <!-- default inline SVG logo (replaceable) -->
-            .app-logo {
-             width: 10px;
-             height: auto;
-             display: block;
-             margin: 0 auto;
-    }
           <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
           <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
