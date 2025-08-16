@@ -196,20 +196,6 @@
         <div class="log-list" id="logList">
           <!-- dynamic logs -->
         </div>
-
-        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:14px 0">
-
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="muted">Replace app SVG logo</div>
-          <div class="file-input">
-            <div class="logo-preview" id="svgPreview">
-              <!-- preview -->
-            </div>
-            <label for="svgUpload" class="file-btn">Upload SVG</label>
-            <input id="svgUpload" type="file" accept=".svg">
-            <div style="margin-left:auto;color:var(--muted);font-size:13px">SVG only</div>
-          </div>
-        </div>
       </aside>
     </div>
 
@@ -266,9 +252,6 @@
   const linkedBattery = document.getElementById('linkedBattery');
   const logList = document.getElementById('logList');
   const refreshLogs = document.getElementById('refreshLogs');
-  const svgUpload = document.getElementById('svgUpload');
-  const appLogo = document.getElementById('appLogo');
-  const svgPreview = document.getElementById('svgPreview');
 
   /**************************************************************************
    * ========================= AUTHENTICATION ===============================
@@ -593,7 +576,7 @@
    * ========================= SVG UPLOAD (logo change) =====================
    * Allows upload of an SVG file and replaces inline logo preview and main SVG.
    **************************************************************************/
-  svgUpload.addEventListener('change', (ev)=>{
+  /*svgUpload.addEventListener('change', (ev)=>{
     const f = ev.target.files[0];
     if(!f) return;
     if(!f.name.toLowerCase().endsWith('.svg')) return alert('Please upload an SVG file only.');
@@ -614,7 +597,7 @@
   });
 
   // Clicking the logo also opens file upload (UX)
-  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());
+  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());*/
 
   /**************************************************************************
    * ========================= UTIL: Page unload cleanup ====================
