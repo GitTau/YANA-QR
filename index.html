@@ -63,17 +63,7 @@
     .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
     
 
-     <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
-     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
-     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
-     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
-     <button id="startCamBtn" class="action-btn">Start Scanner</button>
-     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
-     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
-
-
-
-    /* device info & logs */
+     /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
     .log-list{max-height:380px;overflow:auto;margin-top:8px;padding-right:8px}
     .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
@@ -93,12 +83,15 @@
   <div class="container">
     <!-- HEADER: logo, brand, signin, svg upload -->
     <header>
-    <img src="logo.svg" alt="App Logo" class="app-logo">
-
-          <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
-          <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
+    <img src="logo.svg" alt="App Logo" class="applogo">
+    <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
+     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
+     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
+     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
+     <button id="startCamBtn" class="action-btn">Start Scanner</button>
+     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
+     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
+  </div>
 
       <div>
         <div class="brand">Yana — Rider QR</div>
