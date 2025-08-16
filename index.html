@@ -167,10 +167,12 @@
       <!-- RIGHT: summary, device status, logs, upload logo -->
       <aside class="card">
     .app-logo {
-    width: 150px;
-    height: auto;
-    display: block;
-    margin: 0 auto;
+                       width: 60px;        /* adjust size as needed */
+                       height: auto;       /* keep proportions */
+                       position: absolute; /* fix position on screen */
+                       top: 15px;          /* distance from top */
+                       left: 15px;         /* distance from left */
+                       object-fit: contain;
     }
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:700">Rider & Devices</div>
