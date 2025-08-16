@@ -20,19 +20,10 @@
     }
     html,body{height:100%;margin:0;background:var(--bg);color:#fff;}
     *{box-sizing:border-box}
-    .container{
-      max-width:1100px;margin:28px auto;padding:24px;
-    }
+    .container{ max-width:1100px;margin:28px auto;padding:24px; }
 
-    header{
-      display:flex;align-items:center;gap:18px;margin-bottom:22px;
-    }
-    .logo{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-    }
+    header{ display:flex;align-items:center;gap:18px;margin-bottom:22px; }
+    .logo{ display:flex;align-items:center;justify-content:space-between;padding:12px 16px; }
     .brand{font-size:18px;font-weight:600}
     .sub{font-size:12px;color:var(--muted)}
     .top-actions{margin-left:auto;display:flex;gap:10px;align-items:center}
@@ -56,23 +47,10 @@
     @media(max-width:960px){ .grid{grid-template-columns:1fr} .logo{margin-right:auto}}
 
     /* scanner area */
-    .scanner{
-      display:flex;flex-direction:column;gap:12px;
-    }
+    .scanner{ display:flex;flex-direction:column;gap:12px; }
     #video{width:100%;border-radius:12px; background:#000; height:360px;object-fit:cover;border:1px solid rgba(255,255,255,0.03)}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
-    
-
-     <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
-     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
-     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
-     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
-     <button id="startCamBtn" class="action-btn">Start Scanner</button>
-     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
-     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
-
-
 
     /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
@@ -94,12 +72,10 @@
   <div class="container">
     <!-- HEADER: logo, brand, signin, svg upload -->
     <header>
-    <img src="logo.svg" alt="App Logo" class="app-logo">
+      <img src="logo.svg" alt="App Logo" class="app-logo">
 
       <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
-          <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
-          <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <!-- (kept minimal to avoid layout change) -->
       </div>
 
       <div>
@@ -157,7 +133,7 @@
 
       <!-- RIGHT: summary, device status, logs, upload logo -->
       <aside class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:700">Rider & Devices</div>
         </div>
 
@@ -189,7 +165,7 @@
   </div>
 
   <!-- ========== SCRIPTS ========== -->
-  <!-- Firebase JS SDKs (modular) -->
+  <!-- Firebase JS SDKs (modular compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -242,8 +218,6 @@
   /**************************************************************************
    * ========================= AUTHENTICATION ===============================
    * We use Firebase Google provider with a single-click popup sign-in.
-   * If you want Google One-Tap later, you'll need an OAuth client ID
-   * from Google Cloud and small integration changes.
    **************************************************************************/
 
   signinBtn.addEventListener('click', async () => {
@@ -263,7 +237,7 @@
     await auth.signOut();
   });
 
-  // Auth state change listener (updates UI & loads user doc)
+  // Auth state change listener (updates UI & loads rider doc)
   auth.onAuthStateChanged(async (user)=>{
     if(user){
       userEmailEl.textContent = user.email;
@@ -271,21 +245,22 @@
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
-      // ensure user doc exists
-      const uDocRef = db.collection('users').doc(user.email);
-      const uDoc = await uDocRef.get();
-      if(!uDoc.exists){
-        await uDocRef.set({
-          email: user.email,
+      // === ensure rider doc exists (riders/{email}) ===
+      const riderRef = db.collection('riders').doc(user.email.toLowerCase());
+      const riderSnap = await riderRef.get();
+      if(!riderSnap.exists){
+        await riderRef.set({
+          email: user.email.toLowerCase(),
           name: user.displayName||null,
+          status: 'active',
+          currentScootyId: null,
+          currentBatteryId: null,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          linkedScooter: null,
-          linkedBattery: null
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       }
-      // refresh user's linked devices
+      // refresh rider's linked devices & logs
       loadUserDevices();
-      // refresh some recent logs
       loadLogs();
     } else {
       userEmailEl.textContent = 'Not signed in';
@@ -358,246 +333,284 @@
         // got a QR result
         lastRawResult = code.data.trim();
         lastDecoded.textContent = lastRawResult;
-        // show a nice short device info
-        const parsed = parsePayload(lastRawResult);
-        lastDeviceInfo.textContent = `${parsed.type.toUpperCase()}: ${parsed.id}`;
+        // show a short device info using quickParse (no Firestore call here for speed)
+        const parsed = quickParse(lastRawResult);
+        lastDeviceInfo.textContent = (parsed.type !== 'unknown')
+          ? `${parsed.type.toUpperCase()}: ${parsed.id}`
+          : `ID: ${parsed.id}`;
         submitScanBtn.disabled = false;
         // brief flash on permissionStatus
-        permissionStatus.textContent = `Detected ${parsed.type} ${parsed.id}`;
+        permissionStatus.textContent = `Detected ${parsed.type !== 'unknown' ? parsed.type : 'id'} ${parsed.id}`;
       }
     }, 300);
   }
 
   /**************************************************************************
-   * ========================= PARSING LOGIC =================================*/
-let validDevices = { scooter: [], battery: [] };
-
-// Load devices.txt once (from GitHub Pages or Firebase hosting)
-async function loadValidDevices() {
-  try {
-    const res = await fetch("devices.txt"); // hosted alongside index.html
-    const text = await res.text();
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-    const newDevices = { scooter: [], battery: [] };
-    for (const line of lines) {
-      const [type, id] = line.split(':').map(x => x.trim().toUpperCase());
-      if (type === "SCOOTER") newDevices.scooter.push(id);
-      if (type === "BATTERY") newDevices.battery.push(id);
-    }
-
-    validDevices = newDevices;
-    console.log("✅ Devices loaded:", validDevices);
-
-  } catch (err) {
-    console.error("❌ Could not load devices.txt", err);
-  }
-}
-
-// Call at page load
-loadValidDevices();
-
-// Parse scanned payload
-function parsePayload(raw) {
-  if (!raw) return { type: 'unknown', id: '', raw };
-  const clean = raw.trim().toUpperCase();
-
-  if (validDevices.scooter.includes(clean)) {
-    return { type: 'scooter', id: clean, raw };
-  }
-  if (validDevices.battery.includes(clean)) {
-    return { type: 'battery', id: clean, raw };
-  }
-
-  return { type: 'unknown', id: clean, raw };
-}
-
-  /**************************************************************************
-   * ========================= SUBMIT / REGISTER LOGIC =======================
-   * - ensures a user must sign in
-   * - ensures user can have only one scooter and one battery
-   * - toggles registration/deregistration when same device is scanned
-   * - logs every action in `logs` collection
-   *
-   * Firestore collections used:
-   *  - users (doc id = user.email) : { linkedScooter, linkedBattery, ... }
-   *  - devices (doc id = DEVICE_ID) : { type, linkedTo (email|null), lastSeen }
-   *  - logs (auto id) : {ts, email, action, deviceType, deviceId, rawPayload}
+   * ========================= PARSING / RESOLUTION =========================
+   * No devices.txt — type is inferred from payload or Firestore existence.
    **************************************************************************/
-  submitScanBtn.addEventListener('click', async ()=>{
-    const user = auth.currentUser;
-    if(!user){
-      alert('Please sign in with Google first.');
-      return;
+  function quickParse(raw) {
+    if (!raw) return { type: 'unknown', id: '', raw };
+    const clean = raw.trim().toUpperCase();
+    const m = /^(\s*(SCOOTY|SCOOTER|BATTERY)\s*[:\-]?\s*)([A-Z0-9_\-]+)\s*$/.exec(clean);
+    if (m) {
+      const t = m[2].startsWith('BAT') ? 'battery' : 'scooty';
+      return { type: t, id: m[3], raw };
     }
-    if(!lastRawResult){
-      alert('No QR code scanned yet. Please scan and then submit.');
-      return;
-    }
+    return { type: 'unknown', id: clean, raw };
+  }
 
-    const parsed = parsePayload(lastRawResult);
-    if(parsed.type === 'unknown'){
-      if(!confirm('Unable to detect device type (scooter/battery). Submit as plain device id?')) {
-        return;
-      }
-      // treat as unknown, but we won't allow unknown types; force user to pick mode
-      alert('Select correct mode (top-right dropdown) to indicate Scooter or Battery.');
-      return;
-    }
-
-    // perform transactional checks & updates
-    try{
-      submitScanBtn.disabled = true;
-      permissionStatus.textContent = 'Processing...';
-      await processScan(user.email, parsed.type, parsed.id, parsed.raw);
-      permissionStatus.textContent = 'Done';
-      // update UI
-      loadUserDevices();
-      loadLogs();
-      submitScanBtn.disabled = false;
-    }catch(e){
-      submitScanBtn.disabled = false;
-      permissionStatus.textContent = 'Error';
-      alert('Operation failed: ' + e.message);
-      console.error(e);
-    }
-  });
-
-  /**
-   * processScan: core logic for register/deregister
-   * - Ensures atomicity using Firestore transactions
-   */
-  async function processScan(email, deviceType, deviceId, rawPayload){
-    // canonicalize device doc id (prefix with type to avoid conflicts)
-    const devDocId = `${deviceType}_${deviceId}`;
-    const userRef = db.collection('users').doc(email);
-    const devRef = db.collection('devices').doc(devDocId);
-    const logsRef = db.collection('logs');
-
-    await db.runTransaction(async (tx)=>{
-      const userSnap = await tx.get(userRef);
-      if(!userSnap.exists){
-        throw new Error('User document missing. Sign-in again.');
-      }
-      const userData = userSnap.data();
-      const userLinked = deviceType === 'scooter' ? userData.linkedScooter : userData.linkedBattery;
-
-      const devSnap = await tx.get(devRef);
-      let devData = devSnap.exists ? devSnap.data() : null;
-
-      // if device doc missing, create it (unlinked)
-      if(!devData){
-        devData = { type: deviceType, linkedTo: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() };
-        tx.set(devRef, devData);
-      }
-
-      // CASES:
-      // 1) user has no linked device of this type -> attempt to link
-      if(!userLinked){
-        // device must be unlinked
-        if(devData.linkedTo){
-          throw new Error(`${deviceType} ${deviceId} is already linked to another rider (${devData.linkedTo}).`);
-        }
-        // link device to user
-        const userUpdate = (deviceType === 'scooter') ? { linkedScooter: deviceId } : { linkedBattery: deviceId };
-        tx.update(userRef, {...userUpdate, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-        tx.update(devRef, { linkedTo: email, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
-        // log
-        tx.set(logsRef.doc(), {
-          ts: firebase.firestore.FieldValue.serverTimestamp(),
-          email, action: 'register', deviceType, deviceId, rawPayload
-        });
-        return;
-      }
-
-      // 2) user already linked to some device:
-      // - if linked to same device -> deregister (toggle)
-      if(userLinked === deviceId){
-        // deregister
-        const userUpdate = (deviceType === 'scooter') ? { linkedScooter: null } : { linkedBattery: null };
-        tx.update(userRef, {...userUpdate, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-        // only clear device if it's linked to this user (extra safety)
-        if(devData.linkedTo === email){
-          tx.update(devRef, { linkedTo: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
-        }
-        tx.set(logsRef.doc(), {
-          ts: firebase.firestore.FieldValue.serverTimestamp(),
-          email, action: 'deregister', deviceType, deviceId, rawPayload
-        });
-        return;
-      }
-
-      // 3) user linked to a DIFFERENT device of same type: throw error - must deregister first.
-      throw new Error(`You already have a linked ${deviceType} (${userLinked}). Please deregister it first by scanning the same ${deviceType} QR and submitting.`);
-    });
+  async function resolveTypeFromFirestore(idLike) {
+    const id = idLike.trim().toUpperCase();
+    const [sSnap, bSnap] = await Promise.all([
+      db.collection('scooties').doc(id).get(),
+      db.collection('batteries').doc(id).get()
+    ]);
+    if (sSnap.exists) return { type: 'scooty', id, raw: idLike };
+    if (bSnap.exists) return { type: 'battery', id, raw: idLike };
+    return { type: 'unknown', id, raw: idLike };
   }
 
   /**************************************************************************
-   * ========================= UI: load user & logs ==========================
+   * ========================= BUSINESS OPERATIONS ==========================
+   * Fully transactional. Enforces your rules 2.x, 3.x, 4.x client-side.
    **************************************************************************/
+  function nowTs() { return firebase.firestore.FieldValue.serverTimestamp(); }
+  function riderRefByEmail(email){ return db.collection('riders').doc(email.toLowerCase()); }
+  function scootyRefById(id){ return db.collection('scooties').doc(id.toUpperCase()); }
+  function batteryRefById(id){ return db.collection('batteries').doc(id.toUpperCase()); }
+
   async function loadUserDevices(){
-    const user = auth.currentUser;
-    if(!user) return;
-    const uDoc = await db.collection('users').doc(user.email).get();
-    const data = uDoc.exists ? uDoc.data() : null;
-    linkedScooter.textContent = data && data.linkedScooter ? data.linkedScooter : '—';
-    linkedBattery.textContent = data && data.linkedBattery ? data.linkedBattery : '—';
+    const user = auth.currentUser; if(!user) return;
+    const rDoc = await db.collection('riders').doc(user.email.toLowerCase()).get();
+    const data = rDoc.exists ? rDoc.data() : null;
+    linkedScooter.textContent = data && data.currentScootyId ? data.currentScootyId : '—';
+    linkedBattery.textContent = data && data.currentBatteryId ? data.currentBatteryId : '—';
   }
 
-  // load recent logs (last 50)
+  // Logs (last 50)
   async function loadLogs(){
     logList.innerHTML = `<div class="muted">Loading logs...</div>`;
     const q = db.collection('logs').orderBy('ts','desc').limit(50);
     const snap = await q.get();
     logList.innerHTML = '';
-    if(snap.empty){
-      logList.innerHTML = '<div class="muted">No logs yet</div>';
-      return;
-    }
+    if(snap.empty){ logList.innerHTML = '<div class="muted">No logs yet</div>'; return; }
     snap.forEach(doc=>{
       const d = doc.data();
       const when = d.ts ? new Date(d.ts.toDate()).toLocaleString() : '—';
       const el = document.createElement('div');
       el.className = 'log-item';
       el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${d.action.toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.deviceId})</span></div>
+        <div><strong>${d.action.toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.batteryId || d.scootyId || ''})</span></div>
         <div class="muted" style="font-size:12px">${when}</div>
       </div>
-      <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload)}</code></div>`;
+      <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload || '')}</code></div>`;
       logList.appendChild(el);
     });
   }
   refreshLogs.addEventListener('click', loadLogs);
 
-  // helper to escape HTML
   function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  /**************************************************************************
-   * ========================= SVG UPLOAD (logo change) =====================
-   * Allows upload of an SVG file and replaces inline logo preview and main SVG.
-   **************************************************************************/
-  /*svgUpload.addEventListener('change', (ev)=>{
-    const f = ev.target.files[0];
-    if(!f) return;
-    if(!f.name.toLowerCase().endsWith('.svg')) return alert('Please upload an SVG file only.');
-    const reader = new FileReader();
-    reader.onload = (e)=>{
-      const contents = e.target.result;
-      // simple safety: replace the innerHTML of the preview and main logo
-      try{
-        svgPreview.innerHTML = contents;
-        // update main header logo too (if safe)
-        document.getElementById('logo-container').innerHTML = contents;
-      }catch(err){
-        alert('SVG parse error');
-        console.error(err);
-      }
-    };
-    reader.readAsText(f);
-  });
+  // === Core transactions ===
+  async function assignScooty(email, scootyId, rawPayload){
+    const rRef = riderRefByEmail(email);
+    const sRef = scootyRefById(scootyId);
 
-  // Clicking the logo also opens file upload (UX)
-  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());*/
+    await db.runTransaction(async tx => {
+      const [rSnap, sSnap] = await Promise.all([tx.get(rRef), tx.get(sRef)]);
+      if (!sSnap.exists) throw new Error(`Scooty ${scootyId} does not exist.`);
+      const rider = rSnap.data();
+      const scooty = sSnap.data();
+
+      if (rider.currentScootyId) throw new Error(`You already hold scooty ${rider.currentScootyId}. Return it first.`);
+      if (scooty.currentRiderEmail && scooty.currentRiderEmail.toLowerCase() !== email.toLowerCase()){
+        throw new Error(`Scooty ${scootyId} is assigned to another rider.`);
+      }
+
+      tx.update(rRef, { currentScootyId: scootyId, updatedAt: nowTs() });
+      tx.update(sRef, { currentRiderEmail: email.toLowerCase(), lastUpdated: nowTs(), status: 'in_use' });
+
+      tx.set(db.collection('logs').doc(), {
+        ts: nowTs(), email: email.toLowerCase(),
+        action: 'assign_scooty', deviceType: 'scooty',
+        scootyId, batteryId: null, rawPayload
+      });
+    });
+  }
+
+  async function returnScooty(email, scootyId, rawPayload){
+    const rRef = riderRefByEmail(email);
+    const sRef = scootyRefById(scootyId);
+
+    await db.runTransaction(async tx => {
+      const [rSnap, sSnap] = await Promise.all([tx.get(rRef), tx.get(sRef)]);
+      if (!sSnap.exists) throw new Error(`Scooty ${scootyId} does not exist.`);
+      const rider = rSnap.data();
+      const scooty = sSnap.data();
+
+      if (rider.currentScootyId !== scootyId) throw new Error(`You do not hold scooty ${scootyId}.`);
+      if (!scooty.currentBatteryId) throw new Error(`Scooty return not allowed without a battery.`);
+
+      // Clear rider from scooty
+      tx.update(sRef, { currentRiderEmail: null, lastUpdated: nowTs(), status: 'available' });
+
+      // Clear assigned rider on the battery (keep its scooty link)
+      const bRef = batteryRefById(scooty.currentBatteryId);
+      const bSnap = await tx.get(bRef);
+      if (bSnap.exists) {
+        const battery = bSnap.data();
+        if (battery.assignedRiderEmail && battery.assignedRiderEmail.toLowerCase() === email.toLowerCase()){
+          tx.update(bRef, { assignedRiderEmail: null, lastUpdated: nowTs(), status: 'available' });
+        }
+      }
+
+      // Rider clears scooty
+      tx.update(rRef, { currentScootyId: null, updatedAt: nowTs() });
+
+      tx.set(db.collection('logs').doc(), {
+        ts: nowTs(), email: email.toLowerCase(),
+        action: 'return_scooty', deviceType: 'scooty',
+        scootyId, batteryId: scooty.currentBatteryId || null, rawPayload
+      });
+    });
+  }
+
+  async function assignBattery(email, batteryId, rawPayload){
+    const rRef = riderRefByEmail(email);
+    const bRef = batteryRefById(batteryId);
+
+    await db.runTransaction(async tx => {
+      const [rSnap, bSnap] = await Promise.all([tx.get(rRef), tx.get(bRef)]);
+      if (!bSnap.exists) throw new Error(`Battery ${batteryId} does not exist.`);
+      const rider = rSnap.data();
+      const battery = bSnap.data();
+
+      if (!rider.currentScootyId) throw new Error(`Assign a scooty before assigning a battery.`);
+      if (rider.currentBatteryId) throw new Error(`You already hold battery ${rider.currentBatteryId}. Please return it first.`);
+
+      if (battery.assignedScootyId && battery.assignedScootyId !== rider.currentScootyId){
+        throw new Error(`Please return your current battery (this one belongs to another scooty).`);
+      }
+
+      // Update battery
+      tx.update(bRef, {
+        assignedScootyId: rider.currentScootyId,
+        assignedRiderEmail: email.toLowerCase(),
+        lastUpdated: nowTs(),
+        status: 'in_use'
+      });
+
+      // Update scooty.currentBatteryId
+      const sRef = scootyRefById(rider.currentScootyId);
+      tx.update(sRef, { currentBatteryId: batteryId, lastUpdated: nowTs() });
+
+      // Update rider
+      tx.update(rRef, { currentBatteryId: batteryId, updatedAt: nowTs() });
+
+      tx.set(db.collection('logs').doc(), {
+        ts: nowTs(), email: email.toLowerCase(),
+        action: 'assign_battery', deviceType: 'battery',
+        scootyId: rider.currentScootyId, batteryId, rawPayload
+      });
+    });
+  }
+
+  async function returnBattery(email, batteryId, rawPayload){
+    const rRef = riderRefByEmail(email);
+    const bRef = batteryRefById(batteryId);
+
+    await db.runTransaction(async tx => {
+      const [rSnap, bSnap] = await Promise.all([tx.get(rRef), tx.get(bRef)]);
+      if (!bSnap.exists) throw new Error(`Battery ${batteryId} does not exist.`);
+      const rider = rSnap.data();
+      const battery = bSnap.data();
+
+      if (!rider.currentScootyId) throw new Error(`You don’t hold a scooty.`);
+      if (rider.currentBatteryId !== batteryId){
+        throw new Error(`Scan the battery currently linked to your scooty (${rider.currentBatteryId || 'none'}).`);
+      }
+      if (battery.assignedScootyId && battery.assignedScootyId !== rider.currentScootyId){
+        throw new Error(`This battery belongs to another scooty.`);
+      }
+
+      // Clear battery links
+      tx.update(bRef, { assignedScootyId: null, assignedRiderEmail: null, lastUpdated: nowTs(), status: 'available' });
+
+      // Clear scooty.currentBatteryId but keep rider
+      const sRef = scootyRefById(rider.currentScootyId);
+      tx.update(sRef, { currentBatteryId: null, lastUpdated: nowTs() });
+
+      // Update rider
+      tx.update(rRef, { currentBatteryId: null, updatedAt: nowTs() });
+
+      tx.set(db.collection('logs').doc(), {
+        ts: nowTs(), email: email.toLowerCase(),
+        action: 'return_battery', deviceType: 'battery',
+        scootyId: rider.currentScootyId, batteryId, rawPayload
+      });
+    });
+  }
+
+  /**************************************************************************
+   * ========================= SUBMIT / ROUTER ===============================
+   * Scan result is routed to assign/return per current state.
+   **************************************************************************/
+  submitScanBtn.addEventListener('click', async ()=>{
+    const user = auth.currentUser;
+    if(!user){ alert('Please sign in with Google first.'); return; }
+    if(!lastRawResult){ alert('No QR code scanned yet.'); return; }
+
+    try{
+      submitScanBtn.disabled = true;
+      permissionStatus.textContent = 'Processing...';
+
+      // Determine type
+      let parsed = quickParse(lastRawResult);
+      if (scanMode.value === 'scooter' || scanMode.value === 'scooty') parsed.type = 'scooty';
+      if (scanMode.value === 'battery') parsed.type = 'battery';
+      if (parsed.type === 'unknown') parsed = await resolveTypeFromFirestore(parsed.id);
+
+      if (parsed.type === 'unknown') {
+        throw new Error('Unknown device. Make sure the ID exists in Firestore (scooties/batteries).');
+      }
+
+      // Route
+      const riderSnap = await db.collection('riders').doc(user.email.toLowerCase()).get();
+      const rider = riderSnap.data();
+
+      if (parsed.type === 'scooty') {
+        if (!rider.currentScootyId) {
+          await assignScooty(user.email, parsed.id, parsed.raw);
+        } else if (rider.currentScootyId === parsed.id) {
+          await returnScooty(user.email, parsed.id, parsed.raw);
+        } else {
+          throw new Error(`You already hold scooty ${rider.currentScootyId}. Return it first.`);
+        }
+      }
+
+      if (parsed.type === 'battery') {
+        if (!rider.currentBatteryId) {
+          await assignBattery(user.email, parsed.id, parsed.raw);
+        } else if (rider.currentBatteryId === parsed.id) {
+          await returnBattery(user.email, parsed.id, parsed.raw);
+        } else {
+          throw new Error(`Please return your current battery (${rider.currentBatteryId}) before taking another.`);
+        }
+      }
+
+      // UI refresh
+      await loadUserDevices();
+      await loadLogs();
+      permissionStatus.textContent = 'Done';
+    } catch (e){
+      console.error(e);
+      permissionStatus.textContent = 'Error';
+      alert(e.message);
+    } finally {
+      submitScanBtn.disabled = false;
+    }
+  });
 
   /**************************************************************************
    * ========================= UTIL: Page unload cleanup ====================
@@ -606,16 +619,6 @@ function parsePayload(raw) {
     if(stream) stream.getTracks().forEach(t=>t.stop());
   });
 
-  /**************************************************************************
-   * ========================= INITIAL SIMPLE SETUP =========================
-   * Try to load logs once if the user is already signed in
-   **************************************************************************/
-  (async ()=>{
-    // nothing to do here beyond what onAuthStateChanged handles.
-  })();
-
   </script>
 </body>
 </html>
-
-            
