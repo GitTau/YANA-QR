@@ -369,34 +369,48 @@
   }
 
   /**************************************************************************
-   * ========================= PARSING LOGIC =================================
-   * We accept the following QR payload patterns:
-   *  - scooter:SC001
-   *  - battery:BAT100
-   *  - SC001  (auto-detect: letters like SC or BAT)
-   *
-   * Output: {type: 'scooter'|'battery'|'unknown', id:'...'}
-   **************************************************************************/
-  function parsePayload(raw){
-    if(!raw) return {type:'unknown', id:'', raw};
-    const r = raw.toLowerCase();
-    // common prefixes
-    if(r.startsWith('scooter:') || r.startsWith('sc:')) {
-      return {type:'scooter', id: raw.split(':')[1].trim(), raw};
+   * ========================= PARSING LOGIC =================================*/
+let validDevices = { scooter: [], battery: [] };
+
+// Load devices.txt once (from GitHub Pages or Firebase hosting)
+async function loadValidDevices() {
+  try {
+    const res = await fetch("devices.txt"); // hosted alongside index.html
+    const text = await res.text();
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    const newDevices = { scooter: [], battery: [] };
+    for (const line of lines) {
+      const [type, id] = line.split(':').map(x => x.trim().toUpperCase());
+      if (type === "SCOOTER") newDevices.scooter.push(id);
+      if (type === "BATTERY") newDevices.battery.push(id);
     }
-    if(r.startsWith('battery:') || r.startsWith('bat:')) {
-      return {type:'battery', id: raw.split(':')[1].trim(), raw};
-    }
-    // detect by letters: common naming SC / BAT
-    if(/[bB]at|battery/.test(raw) || raw.match(/^bat/i)) return {type:'battery', id:raw.replace(/^bat[:\-\s]*/i,'').trim(), raw};
-    if(/[sS]c|scooter/.test(raw) || raw.match(/^sc/i)) return {type:'scooter', id:raw.replace(/^sc[:\-\s]*/i,'').trim(), raw};
-    // fallback: if user forced mode, honor it
-    const forced = scanMode.value;
-    if(forced === 'scooter') return {type:'scooter', id:raw, raw};
-    if(forced === 'battery') return {type:'battery', id:raw, raw};
-    // unknown
-    return {type:'unknown', id:raw, raw};
+
+    validDevices = newDevices;
+    console.log("✅ Devices loaded:", validDevices);
+
+  } catch (err) {
+    console.error("❌ Could not load devices.txt", err);
   }
+}
+
+// Call at page load
+loadValidDevices();
+
+// Parse scanned payload
+function parsePayload(raw) {
+  if (!raw) return { type: 'unknown', id: '', raw };
+  const clean = raw.trim().toUpperCase();
+
+  if (validDevices.scooter.includes(clean)) {
+    return { type: 'scooter', id: clean, raw };
+  }
+  if (validDevices.battery.includes(clean)) {
+    return { type: 'battery', id: clean, raw };
+  }
+
+  return { type: 'unknown', id: clean, raw };
+}
 
   /**************************************************************************
    * ========================= SUBMIT / REGISTER LOGIC =======================
