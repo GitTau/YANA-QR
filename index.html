@@ -1,53 +1,47 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Yana MVP — QR Module</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Manager</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="container">
-    <header class="header">
-      <img src="logo.svg" alt="Yana Logo" class="logo" />
-      <h1>Yana Rider App (MVP)</h1>
-    </header>
+  <header>
+    <div id="logo-container">
+      <svg id="app-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="45" stroke="black" stroke-width="5" fill="lightblue"/>
+        <text x="50%" y="55%" text-anchor="middle" font-size="20" fill="black">LOGO</text>
+      </svg>
+    </div>
+    <input type="file" id="logo-upload" accept=".svg">
+    <button id="google-signin">Sign in with Google</button>
+    <button id="google-signout" style="display:none;">Sign out</button>
+  </header>
 
-    <!-- Auth Section -->
-    <section id="auth-section" class="card">
-      <button id="googleSignInBtn" class="btn">Sign in with Google</button>
-      <button id="signOutBtn" class="btn hidden">Sign out</button>
-      <p id="status">Not signed in</p>
+  <main>
+    <section id="scanner-section">
+      <h2>QR Code Scanner</h2>
+      <video id="video" autoplay></video>
+      <canvas id="canvas" hidden></canvas>
     </section>
 
-    <!-- User Info -->
-    <section id="user-info" class="card hidden">
-      <h3>Signed in as:</h3>
-      <p id="userEmail"></p>
+    <section id="devices-section">
+      <h2>Linked Devices</h2>
+      <ul id="device-list"></ul>
     </section>
 
-    <!-- QR Scanner Section -->
-    <section id="scanner-section" class="card hidden">
-      <h3>Scan QR Code</h3>
-      <div id="qr-reader" style="width:100%"></div>
-      <p id="scanResult" class="mono"></p>
+    <section id="logs-section">
+      <h2>Activity Logs</h2>
+      <ul id="log-list"></ul>
     </section>
-
-    <!-- Debug Logs -->
-    <section class="card">
-      <h3>Debug</h3>
-      <pre id="firestoreStatus" class="mono"></pre>
-    </section>
-
-    <footer class="muted">
-      Powered by Yana — Firebase MVP
-    </footer>
   </main>
 
-  <!-- QR Scanner library -->
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-
-  <!-- Firebase App -->
-  <script type="module" src="app.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js"></script>
+  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
