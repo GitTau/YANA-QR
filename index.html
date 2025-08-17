@@ -237,6 +237,43 @@
     await auth.signOut();
   });
 
+  /**************************************************************************
+   * Helper: ensure rider doc exists and has required fields. This is
+   * defensive — if a manual doc was created with missing fields, we patch it.
+   **************************************************************************/
+  async function ensureRiderDoc(user){
+    if(!user || !user.email) return;
+    const email = user.email.toLowerCase();
+    const rRef = db.collection('riders').doc(email);
+    try{
+      const snap = await rRef.get();
+      if(!snap.exists){
+        await rRef.set({
+          email,
+          name: user.displayName || null,
+          status: 'active',
+          currentScootyId: null,
+          currentBatteryId: null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        // patch missing fields if any
+        const data = snap.data() || {};
+        const patch = {};
+        if (data.currentScootyId === undefined) patch.currentScootyId = null;
+        if (data.currentBatteryId === undefined) patch.currentBatteryId = null;
+        if (Object.keys(patch).length) {
+          patch.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+          await rRef.update(patch);
+        }
+      }
+    }catch(err){
+      console.error('ensureRiderDoc error', err);
+      // We do not throw here — the UI will surface permission errors elsewhere.
+    }
+  }
+
   // Auth state change listener (updates UI & loads rider doc)
   auth.onAuthStateChanged(async (user)=>{
     if(user){
@@ -245,20 +282,9 @@
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
-      // === ensure rider doc exists (riders/{email}) ===
-      const riderRef = db.collection('riders').doc(user.email.toLowerCase());
-      const riderSnap = await riderRef.get();
-      if(!riderSnap.exists()){
-        await riderRef.set({
-          email: user.email.toLowerCase(),
-          name: user.displayName||null,
-          status: 'active',
-          currentScootyId: null,
-          currentBatteryId: null,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }
+      // ensure rider doc exists and has fields
+      await ensureRiderDoc(user);
+
       // refresh rider's linked devices & logs
       loadUserDevices();
       loadLogs();
@@ -382,35 +408,46 @@
 
   async function loadUserDevices(){
     const user = auth.currentUser; if(!user) return;
-    const rDoc = await db.collection('riders').doc(user.email.toLowerCase()).get();
-    const data = rDoc.exists ? rDoc.data() : null;
-    linkedScooter.textContent = data && data.currentScootyId ? data.currentScootyId : '—';
-    linkedBattery.textContent = data && data.currentBatteryId ? data.currentBatteryId : '—';
+    try{
+      const rDoc = await db.collection('riders').doc(user.email.toLowerCase()).get();
+      const data = (rDoc && rDoc.exists) ? rDoc.data() : null;
+      linkedScooter.textContent = data && data.currentScootyId ? data.currentScootyId : '—';
+      linkedBattery.textContent = data && data.currentBatteryId ? data.currentBatteryId : '—';
+    }catch(err){
+      console.error('loadUserDevices error', err);
+      linkedScooter.textContent = '—';
+      linkedBattery.textContent = '—';
+    }
   }
 
   // Logs (last 50)
   async function loadLogs(){
     logList.innerHTML = `<div class="muted">Loading logs...</div>`;
-    const q = db.collection('logs').orderBy('ts','desc').limit(50);
-    const snap = await q.get();
-    logList.innerHTML = '';
-    if(snap.empty){ logList.innerHTML = '<div class="muted">No logs yet</div>'; return; }
-    snap.forEach(doc=>{
-      const d = doc.data();
-      const when = d.ts ? new Date(d.ts.toDate()).toLocaleString() : '—';
-      const el = document.createElement('div');
-      el.className = 'log-item';
-      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${d.action.toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.batteryId || d.scootyId || ''})</span></div>
-        <div class="muted" style="font-size:12px">${when}</div>
-      </div>
-      <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload || '')}</code></div>`;
-      logList.appendChild(el);
-    });
+    try{
+      const q = db.collection('logs').orderBy('ts','desc').limit(50);
+      const snap = await q.get();
+      logList.innerHTML = '';
+      if(snap.empty){ logList.innerHTML = '<div class="muted">No logs yet</div>'; return; }
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const when = d.ts ? new Date(d.ts.toDate()).toLocaleString() : '—';
+        const el = document.createElement('div');
+        el.className = 'log-item';
+        el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>${d.action.toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.batteryId || d.scootyId || ''})</span></div>
+          <div class="muted" style="font-size:12px">${when}</div>
+        </div>
+        <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload || '')}</code></div>`;
+        logList.appendChild(el);
+      });
+    }catch(err){
+      console.error('loadLogs error', err);
+      logList.innerHTML = '<div class="muted">Unable to load logs</div>';
+    }
   }
   refreshLogs.addEventListener('click', loadLogs);
 
-  function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function escapeHtml(s){ return (s+'').replace(/[&<>\"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c])); }
 
   // === Core transactions ===
   async function assignScooty(email, scootyId, rawPayload){
@@ -420,7 +457,7 @@
     await db.runTransaction(async tx => {
       const [rSnap, sSnap] = await Promise.all([tx.get(rRef), tx.get(sRef)]);
       if (!sSnap.exists) throw new Error(`Scooty ${scootyId} does not exist.`);
-      const rider = rSnap.data();
+      const rider = rSnap.exists ? rSnap.data() : { currentScootyId: null, currentBatteryId: null };
       const scooty = sSnap.data();
 
       if (rider.currentScootyId) throw new Error(`You already hold scooty ${rider.currentScootyId}. Return it first.`);
@@ -446,7 +483,7 @@
     await db.runTransaction(async tx => {
       const [rSnap, sSnap] = await Promise.all([tx.get(rRef), tx.get(sRef)]);
       if (!sSnap.exists) throw new Error(`Scooty ${scootyId} does not exist.`);
-      const rider = rSnap.data();
+      const rider = rSnap.exists ? rSnap.data() : { currentScootyId: null, currentBatteryId: null };
       const scooty = sSnap.data();
 
       if (rider.currentScootyId !== scootyId) throw new Error(`You do not hold scooty ${scootyId}.`);
@@ -483,7 +520,7 @@
     await db.runTransaction(async tx => {
       const [rSnap, bSnap] = await Promise.all([tx.get(rRef), tx.get(bRef)]);
       if (!bSnap.exists) throw new Error(`Battery ${batteryId} does not exist.`);
-      const rider = rSnap.data();
+      const rider = rSnap.exists ? rSnap.data() : { currentScootyId: null, currentBatteryId: null };
       const battery = bSnap.data();
 
       if (!rider.currentScootyId) throw new Error(`Assign a scooty before assigning a battery.`);
@@ -523,7 +560,7 @@
     await db.runTransaction(async tx => {
       const [rSnap, bSnap] = await Promise.all([tx.get(rRef), tx.get(bRef)]);
       if (!bSnap.exists) throw new Error(`Battery ${batteryId} does not exist.`);
-      const rider = rSnap.data();
+      const rider = rSnap.exists ? rSnap.data() : { currentScootyId: null, currentBatteryId: null };
       const battery = bSnap.data();
 
       if (!rider.currentScootyId) throw new Error(`You don’t hold a scooty.`);
@@ -554,7 +591,8 @@
 
   /**************************************************************************
    * ========================= SUBMIT / ROUTER ===============================
-   * Scan result is routed to assign/return per current state.
+   * Scan result is routed to assign/return per current state. Defensive checks
+   * ensure missing docs/fields don't crash the UI.
    **************************************************************************/
   submitScanBtn.addEventListener('click', async ()=>{
     const user = auth.currentUser;
@@ -576,8 +614,9 @@
       }
 
       // Route
-      const riderSnap = await db.collection('riders').doc(user.email.toLowerCase()).get();
-      const rider = riderSnap.data();
+      const riderEmail = user.email.toLowerCase();
+      const riderSnap = await db.collection('riders').doc(riderEmail).get();
+      const rider = (riderSnap && riderSnap.exists) ? riderSnap.data() : { currentScootyId: null, currentBatteryId: null };
 
       if (parsed.type === 'scooty') {
         if (!rider.currentScootyId) {
