@@ -248,7 +248,7 @@
       // === ensure rider doc exists (riders/{email}) ===
       const riderRef = db.collection('riders').doc(user.email.toLowerCase());
       const riderSnap = await riderRef.get();
-      if(!riderSnap.exists){
+      if(!riderSnap.exists()){
         await riderRef.set({
           email: user.email.toLowerCase(),
           name: user.displayName||null,
