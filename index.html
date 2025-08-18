@@ -379,7 +379,7 @@
         const parsed = parsePayload(lastRawResult);
         lastDecoded.textContent = parsed.raw;
         lastDeviceInfo.textContent = `${parsed.type.toUpperCase()}: ${parsed.id || '—'}`;
-        submitScanBtn.disabled = !!parsed.id; // enable when we have an ID
+        submitScanBtn.disabled = !parsed.id; // enable when we have an ID
         // brief flash on permissionStatus
         permissionStatus.textContent = parsed.id ? `Detected ${parsed.type} ${parsed.id}` : `Scan detected; choose type`;
       }
