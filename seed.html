@@ -1,0 +1,362 @@
+<!--
+  seed.html  —  Simple seeding tool for Yana (Pilot Mode)
+  WHAT IT DOES:
+    - Lets you sign in with Google (same project as your app)
+    - Creates N Scooties and N Batteries in Firestore (top-level collections)
+    - (Optional) Generates a devices.txt file you can download for your web app’s local allow-list
+
+  SAFETY:
+    - Pilot Mode only. Anyone signed in can write to Firestore per your relaxed rules.
+    - Do NOT deploy publicly in production without tightening Firestore rules or moving to Cloud Functions.
+
+  HOW TO USE:
+    1) Put this file next to index4.html (project root).
+    2) Update the firebaseConfig below if needed.
+    3) Serve over HTTP (Firebase Hosting, or a local web server).
+    4) Sign in, set counts & prefixes, click the buttons.
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Yana — Seeder (Pilot Mode)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0b0f13; --card:#121821; --text:#e7eef5; --muted:#8fa3b6; --accent:#00eaff; --border:#1e2a38; --radius:14px; }
+    html,body { margin:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .wrap { max-width:900px; margin:24px auto; padding:20px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    h1,h2 { margin:0 0 12px 0; }
+    h1 { font-size:20px; }
+    h2 { font-size:16px; color:var(--muted); }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width:800px){ .grid{ grid-template-columns: 1fr; } }
+    label { font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+    input, select { background:#0d131b; color:var(--text); border:1px solid var(--border); padding:10px 12px; border-radius:10px; width:100%; }
+    .btn { background:var(--accent); border:none; color:#00333a; font-weight:700; padding:10px 14px; border-radius:10px; cursor:pointer; }
+    .btn.ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
+    .muted { color:var(--muted); font-size:12px; }
+    .log { margin-top:12px; height:200px; overflow:auto; background:#0d131b; border:1px dashed var(--border); border-radius:10px; padding:10px; white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; }
+    .ok { color:#9cffb0; }
+    .err{ color:#ff8585; }
+    .footer { margin-top:16px; text-align:center; color:var(--muted); font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" style="margin-bottom:16px;">
+      <h1>Yana — Seeder</h1>
+      <div class="row" style="justify-content:space-between;">
+        <div class="muted">Create test Scooties & Batteries in Firestore</div>
+        <div>
+          <span id="who" class="muted">Not signed in</span>
+          <button id="signin" class="btn" style="margin-left:10px;">Sign in with Google</button>
+          <button id="signout" class="btn ghost" style="margin-left:6px; display:none;">Sign out</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Scooties -->
+      <div class="card">
+        <h2>Seed Scooties</h2>
+        <div class="row">
+          <div style="flex:1;">
+            <label>How many</label>
+            <input id="sCount" type="number" min="1" max="500" value="5" />
+          </div>
+          <div style="flex:1;">
+            <label>Prefix (Doc ID & field)</label>
+            <input id="sPrefix" type="text" value="SCOOTY" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div style="flex:1;">
+            <label>Start index</label>
+            <input id="sStart" type="number" min="0" value="1" />
+          </div>
+          <div style="flex:1;">
+            <label>Pad digits (e.g., 3 → 001)</label>
+            <input id="sPad" type="number" min="0" max="8" value="3" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div style="flex:1;">
+            <label>Status</label>
+            <select id="sStatus">
+              <option value="available">available</option>
+              <option value="in_use">in_use</option>
+              <option value="maintenance">maintenance</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </div>
+          <div style="flex:1; display:flex; align-items:flex-end; justify-content:flex-end;">
+            <button id="seedScooties" class="btn">Create Scooties</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batteries -->
+      <div class="card">
+        <h2>Seed Batteries</h2>
+        <div class="row">
+          <div style="flex:1;">
+            <label>How many</label>
+            <input id="bCount" type="number" min="1" max="500" value="5" />
+          </div>
+          <div style="flex:1;">
+            <label>Prefix (Doc ID & field)</label>
+            <input id="bPrefix" type="text" value="BAT" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div style="flex:1;">
+            <label>Start index</label>
+            <input id="bStart" type="number" min="0" value="1" />
+          </div>
+          <div style="flex:1;">
+            <label>Pad digits (e.g., 3 → 001)</label>
+            <input id="bPad" type="number" min="0" max="8" value="3" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <div style="flex:1;">
+            <label>Status</label>
+            <select id="bStatus">
+              <option value="available">available</option>
+              <option value="in_use">in_use</option>
+              <option value="maintenance">maintenance</option>
+              <option value="inactive">inactive</option>
+            </select>
+          </div>
+          <div style="flex:1; display:flex; align-items:flex-end; justify-content:flex-end;">
+            <button id="seedBatteries" class="btn">Create Batteries</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Utility: download devices.txt for your app's allow-list (optional) -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Optional — Generate devices.txt</h2>
+      <div class="row">
+        <div class="muted">After seeding, click this to download a devices.txt you can upload alongside index4.html (handy for your app’s fallback validation).</div>
+        <button id="downloadDevices" class="btn" style="margin-left:auto;">Download devices.txt</button>
+      </div>
+    </div>
+
+    <!-- Log area -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Activity</h2>
+      <div id="log" class="log"></div>
+      <div class="footer">Tip: IDs are uppercased as <code>PREFIX###</code> and created if missing. Existing docs are updated/merged safely.</div>
+    </div>
+  </div>
+
+  <!-- Firebase (compat) same as your app -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    /**********************************************************************
+     * 1) Firebase config — use the SAME project as your app
+     *    (These values match your current project; change if needed)
+     **********************************************************************/
+    const firebaseConfig = {
+      apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+      authDomain: "yana-qr.firebaseapp.com",
+      projectId: "yana-qr",
+      storageBucket: "yana-qr.firebasestorage.app",
+      messagingSenderId: "905613005387",
+      appId: "1:905613005387:web:b0d8464d826972654b73ce",
+      measurementId: "G-9P9DLJGQHQ"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // Handy alias to server timestamps
+    const serverTS = firebase.firestore.FieldValue.serverTimestamp();
+
+    /**********************************************************************
+     * 2) DOM helpers
+     **********************************************************************/
+    const $ = (id)=> document.getElementById(id);
+    const logBox = $('log');
+    function log(msg, cls=''){ const line = document.createElement('div'); line.className = cls; line.textContent = msg; logBox.appendChild(line); logBox.scrollTop = logBox.scrollHeight; }
+
+    // Keep a memory of last-created IDs so we can generate devices.txt
+    let lastScootyIds = [];
+    let lastBatteryIds = [];
+
+    /**********************************************************************
+     * 3) Auth UI (Google Sign-In)
+     **********************************************************************/
+    $('signin').addEventListener('click', async ()=>{
+      try{
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await auth.signInWithPopup(provider);
+      }catch(e){
+        log('Sign-in failed: '+e.message, 'err');
+      }
+    });
+    $('signout').addEventListener('click', ()=> auth.signOut());
+
+    auth.onAuthStateChanged(user=>{
+      if(user){
+        $('who').textContent = `${user.email}`;
+        $('signin').style.display = 'none';
+        $('signout').style.display = 'inline-block';
+        log('Signed in as '+user.email, 'ok');
+      } else {
+        $('who').textContent = 'Not signed in';
+        $('signin').style.display = 'inline-block';
+        $('signout').style.display = 'none';
+        log('Signed out');
+      }
+    });
+
+    /**********************************************************************
+     * 4) ID builder — PREFIX + zero-padded number → UPPERCASE
+     **********************************************************************/
+    function buildIds(prefix, count, start, pad){
+      const ids = [];
+      const p = (''+(prefix||'')).trim().toUpperCase();
+      for(let i=0;i<count;i++){
+        const n = start + i;
+        const num = pad > 0 ? String(n).padStart(pad,'0') : String(n);
+        ids.push(`${p}${num}`);
+      }
+      return ids;
+    }
+
+    /**********************************************************************
+     * 5) Batch writer — Firestore limits: 500 writes per batch.
+     *    We chunk writes to be safe. Each doc is set with merge:true.
+     **********************************************************************/
+    async function chunkedSet(collection, docs){
+      const CHUNK = 450; // a bit below 500 for headroom
+      for(let i=0;i<docs.length;i+=CHUNK){
+        const slice = docs.slice(i,i+CHUNK);
+        const batch = db.batch();
+        slice.forEach(({id, data})=>{
+          batch.set(db.collection(collection).doc(id), data, { merge:true });
+        });
+        await batch.commit();
+      }
+    }
+
+    /**********************************************************************
+     * 6) Seed Scooties
+     **********************************************************************/
+    $('seedScooties').addEventListener('click', async ()=>{
+      const user = auth.currentUser;
+      if(!user){ alert('Please sign in first.'); return; }
+
+      // Read form values
+      const count = Math.max(1, Math.min(500, Number($('sCount').value||0)));
+      const prefix = $('sPrefix').value || 'SCOOTY';
+      const start = Number($('sStart').value||1);
+      const pad = Math.max(0, Math.min(8, Number($('sPad').value||0)));
+      const status = $('sStatus').value || 'available';
+
+      // Build IDs
+      const ids = buildIds(prefix, count, start, pad);
+      lastScootyIds = ids.slice(); // remember for devices.txt
+
+      // Create docs
+      const docs = ids.map(id => ({
+        id,
+        data: {
+          scootyId: id,                 // (docId = scootyId)
+          currentBatteryId: null,       // start unlinked
+          currentRiderEmail: null,      // start unassigned
+          status,                       // chosen status
+          lastUpdated: serverTS         // set/updated server-side
+        }
+      }));
+
+      try{
+        log(`Creating ${docs.length} scooties...`);
+        await chunkedSet('scooties', docs);
+        log(`✔ Scooties created/updated: ${ids.join(', ')}`, 'ok');
+      }catch(e){
+        log(`✖ Scooty seeding failed: ${e.message}`, 'err');
+        alert('Scooty seeding failed: ' + e.message);
+      }
+    });
+
+    /**********************************************************************
+     * 7) Seed Batteries
+     **********************************************************************/
+    $('seedBatteries').addEventListener('click', async ()=>{
+      const user = auth.currentUser;
+      if(!user){ alert('Please sign in first.'); return; }
+
+      // Read form values
+      const count = Math.max(1, Math.min(500, Number($('bCount').value||0)));
+      const prefix = $('bPrefix').value || 'BAT';
+      const start = Number($('bStart').value||1);
+      const pad = Math.max(0, Math.min(8, Number($('bPad').value||0)));
+      const status = $('bStatus').value || 'available';
+
+      // Build IDs
+      const ids = buildIds(prefix, count, start, pad);
+      lastBatteryIds = ids.slice(); // remember for devices.txt
+
+      // Create docs
+      const docs = ids.map(id => ({
+        id,
+        data: {
+          batteryId: id,                // (docId = batteryId)
+          assignedScootyId: null,       // start unlinked
+          assignedRiderEmail: null,     // start unassigned
+          status,                       // chosen status
+          lastUpdated: serverTS         // set/updated server-side
+        }
+      }));
+
+      try{
+        log(`Creating ${docs.length} batteries...`);
+        await chunkedSet('batteries', docs);
+        log(`✔ Batteries created/updated: ${ids.join(', ')}`, 'ok');
+      }catch(e){
+        log(`✖ Battery seeding failed: ${e.message}`, 'err');
+        alert('Battery seeding failed: ' + e.message);
+      }
+    });
+
+    /**********************************************************************
+     * 8) Generate devices.txt (optional)
+     *    Format expected by your app:
+     *      SCOOTER:SCOOTY001
+     *      BATTERY:BAT001
+     **********************************************************************/
+    $('downloadDevices').addEventListener('click', ()=>{
+      if(lastScootyIds.length === 0 && lastBatteryIds.length === 0){
+        alert('Seed something first (scooties or batteries), then try again.');
+        return;
+      }
+      const lines = [];
+      lastScootyIds.forEach(id => lines.push(`SCOOTER:${id}`));
+      lastBatteryIds.forEach(id => lines.push(`BATTERY:${id}`));
+      const content = lines.join('\n');
+
+      const blob = new Blob([content], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'devices.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      log('devices.txt generated for download', 'ok');
+    });
+
+  </script>
+</body>
+</html>
