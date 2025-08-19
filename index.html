@@ -337,8 +337,40 @@
    *  - scooties/{scootyId}          fields: currentBatteryId, currentRiderEmail, status, lastUpdated
    *  - batteries/{batteryId}        fields: assignedScootyId, assignedRiderEmail, status, lastUpdated
    **************************************************************************/
+// --- HELPERS: make sure master docs exist BEFORE transactions ---
 
-  // Utility: ensure master docs exist (lazy creation) with neutral defaults.
+async function ensureScootyDoc(scootyId){
+  const ref = db.collection('scooties').doc(scootyId);
+  const snap = await ref.get();
+  if(!snap.exists){
+    await ref.set({
+      scootyId,
+      currentBatteryId: null,
+      currentRiderEmail: null,
+      status: 'active',
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  return ref;
+}
+
+async function ensureBatteryDoc(batteryId){
+  const ref = db.collection('batteries').doc(batteryId);
+  const snap = await ref.get();
+  if(!snap.exists){
+    await ref.set({
+      batteryId,
+      assignedScootyId: null,
+      assignedRiderEmail: null,
+      status: 'available',
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  return ref;
+}
+
+  
+    // Utility: ensure master docs exist (lazy creation) with neutral defaults.
   function baseScootyDoc(scootyId){
     return {
       scootyId,
@@ -390,221 +422,213 @@
 
   // Assign a scooty to rider (Rule 3.1)
   async function assignScootyTx(email, scootyId){
-    const uRef = db.collection('users').doc(email);
-    const sRef = db.collection('scooties').doc(scootyId);
+  const uRef = db.collection('users').doc(email);
+  const sRef = await ensureScootyDoc(scootyId);  // ensure master exists
 
-    await db.runTransaction(async (tx)=>{
-      const [uSnap, sSnap] = await Promise.all([tx.get(uRef), tx.get(sRef)]);
-      if(!uSnap.exists) throw new Error('User doc missing.');
-      const u = uSnap.data();
+  await db.runTransaction(async (tx)=>{
+    const [uSnap, sSnap] = await Promise.all([tx.get(uRef), tx.get(sRef)]);
+    if(!uSnap.exists) throw new Error('User doc missing.');
+    const u = uSnap.data();
 
-      if(u.linkedScooter) throw new Error(`You already hold scooty ${u.linkedScooter}. Return it first.`);
+    // Rider cannot already have a scooty (Rule 3.1.1.1)
+    if(u.linkedScooter) throw new Error(`You already hold scooty ${u.linkedScooter}. Return it first.`);
 
-      let s = sSnap.exists ? sSnap.data() : baseScootyDoc(scootyId);
+    const s = sSnap.data();
 
-      if(s.currentRiderEmail && s.currentRiderEmail !== email){
-        throw new Error(`Scooty ${scootyId} is already assigned to ${s.currentRiderEmail}.`);
-      }
+    // Scooty must not be assigned to another rider (Rule 3.1.1.2)
+    if(s.currentRiderEmail && s.currentRiderEmail !== email){
+      throw new Error(`Scooty ${scootyId} is already assigned to ${s.currentRiderEmail}.`);
+    }
 
-      // Process: link rider on scooty; retain existing battery if any
-      s.currentRiderEmail = email;
-      s.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      tx.set(sRef, s, {merge:true});
-      tx.update(uRef, {
-        linkedScooter: scootyId,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      // If user had a battery linked (should not per 2.1 same-type rule), allowed—battery is separate entity.
-      // Logging
-      tx.set(db.collection('logs').doc(), {
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'register', deviceType:'scooty', deviceId:scootyId, rawPayload:`scooty:${scootyId}`
-      });
-
-      // Optional consistency assert (post)
-      const bId = s.currentBatteryId;
-      if(bId){
-        const bRef = db.collection('batteries').doc(bId);
-        const bSnap = await tx.get(bRef);
-        if(bSnap.exists){
-          const b = bSnap.data();
-          // If a battery is mounted, it must point back to the scooty (Rule 2.2/2.3)
-          if(b.assignedScootyId && b.assignedScootyId !== s.scootyId){
-            throw new Error('Consistency issue: mounted battery points to another scooty.');
-          }
-        }
-      }
+    // Process (Rule 3.1.2): set currentRiderEmail; retain existing battery if any
+    tx.update(sRef, {
+      currentRiderEmail: email,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     });
-  }
+
+    tx.update(uRef, {
+      linkedScooter: scootyId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Log inside the same transaction (atomic with state)
+    tx.set(db.collection('logs').doc(), {
+      ts: firebase.firestore.FieldValue.serverTimestamp(),
+      email, action:'register', deviceType:'scooty', deviceId:scootyId, rawPayload:`scooty:${scootyId}`
+    });
+  });
+}
+
 
   // Return scooty (Rule 4.1)
   async function returnScootyTx(email, scootyId){
-    const uRef = db.collection('users').doc(email);
-    const sRef = db.collection('scooties').doc(scootyId);
+  const uRef = db.collection('users').doc(email);
+  const sRef = await ensureScootyDoc(scootyId);  // ensure master exists
 
-    await db.runTransaction(async (tx)=>{
-      const [uSnap, sSnap] = await Promise.all([tx.get(uRef), tx.get(sRef)]);
-      if(!uSnap.exists) throw new Error('User doc missing.');
-      const u = uSnap.data();
-      if(u.linkedScooter !== scootyId) throw new Error('This scooty is not assigned to you.');
+  await db.runTransaction(async (tx)=>{
+    const [uSnap, sSnap] = await Promise.all([tx.get(uRef), tx.get(sRef)]);
+    if(!uSnap.exists) throw new Error('User doc missing.');
+    const u = uSnap.data();
 
-      if(!sSnap.exists) throw new Error('Scooty record missing.');
-      const s = sSnap.data();
+    if(u.linkedScooter !== scootyId) throw new Error('This scooty is not assigned to you.');
+    if(!sSnap.exists) throw new Error('Scooty record missing.');
+    const s = sSnap.data();
 
-      // Preconditions: scooty must have a battery (Rule 2.4)
-      if(!s.currentBatteryId){
-        throw new Error('Scooty return blocked: attach/retain its battery before returning.');
-      }
+    // Preconditions (Rule 4.1.1): scooty MUST have a battery linked
+    if(!s.currentBatteryId){
+      throw new Error('Scooty return blocked: attach/retain its battery before returning.');
+    }
 
-      // Process: clear rider from scooty (keep battery); clear rider in battery (keep scooty)
-      const bRef = db.collection('batteries').doc(s.currentBatteryId);
-      const bSnap = await tx.get(bRef);
-      if(!bSnap.exists) throw new Error('Battery record missing.');
-      const b = bSnap.data();
+    // Battery must exist and be linked back to this scooty
+    const bRef = await ensureBatteryDoc(s.currentBatteryId);
+    const bSnap = await tx.get(bRef);
+    if(!bSnap.exists) throw new Error('Battery record missing.');
+    const b = bSnap.data();
+    if(b.assignedScootyId !== scootyId){
+      throw new Error('Inconsistency: battery is not linked to this scooty.');
+    }
 
-      // Battery must belong to same scooty
-      if(b.assignedScootyId !== scootyId){
-        throw new Error('Inconsistency: battery is not linked to this scooty.');
-      }
-
-      // Clear rider on both, keep scooty-battery linkage
-      s.currentRiderEmail = null;
-      s.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-      b.assignedRiderEmail = null;
-      b.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      tx.update(sRef, s);
-      tx.update(bRef, b);
-
-      // Rider holds neither scooty nor battery after return (Rule 4.1.3)
-      tx.update(uRef, {
-        linkedScooter: null,
-        linkedBattery: null,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      tx.set(db.collection('logs').doc(), {
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'deregister', deviceType:'scooty', deviceId:scootyId, rawPayload:`scooty:${scootyId}`
-      });
+    // Process (Rule 4.1.2): clear rider on both, keep scooty-battery link
+    tx.update(sRef, {
+      currentRiderEmail: null,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     });
-  }
+
+    tx.update(bRef, {
+      assignedRiderEmail: null,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Rider should hold neither after return (Rule 4.1.3)
+    tx.update(uRef, {
+      linkedScooter: null,
+      linkedBattery: null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Log
+    tx.set(db.collection('logs').doc(), {
+      ts: firebase.firestore.FieldValue.serverTimestamp(),
+      email, action:'deregister', deviceType:'scooty', deviceId:scootyId, rawPayload:`scooty:${scootyId}`
+    });
+  });
+}
+
 
   // Assign battery (Rule 3.2)
-  async function assignBatteryTx(email, batteryId){
-    const uRef = db.collection('users').doc(email);
-    const bRef = db.collection('batteries').doc(batteryId);
+async function assignBatteryTx(email, batteryId){
+  const uRef = db.collection('users').doc(email);
+  const bRef = await ensureBatteryDoc(batteryId); // ensure master exists
 
-    await db.runTransaction(async (tx)=>{
-      const uSnap = await tx.get(uRef);
-      if(!uSnap.exists) throw new Error('User doc missing.');
-      const u = uSnap.data();
+  await db.runTransaction(async (tx)=>{
+    const uSnap = await tx.get(uRef);
+    if(!uSnap.exists) throw new Error('User doc missing.');
+    const u = uSnap.data();
 
-      if(!u.linkedScooter) throw new Error('Assign a scooty first before assigning a battery.');
-      if(u.linkedBattery) throw new Error(`You already hold battery ${u.linkedBattery}. Return it first.`);
+    // Rider must have a scooty and no battery (Rule 3.2.1.1)
+    if(!u.linkedScooter) throw new Error('Assign a scooty first before assigning a battery.');
+    if(u.linkedBattery) throw new Error(`You already hold battery ${u.linkedBattery}. Return it first.`);
 
-      // Resolve rider's scooty
-      const sRef = db.collection('scooties').doc(u.linkedScooter);
-      const sSnap = await tx.get(sRef);
-      let s = sSnap.exists ? sSnap.data() : baseScootyDoc(u.linkedScooter);
+    // Get rider’s scooty master, ensure exists
+    const sRef = await ensureScootyDoc(u.linkedScooter);
+    const [sSnap, bSnap] = await Promise.all([tx.get(sRef), tx.get(bRef)]);
+    const s = sSnap.data();
+    const b = bSnap.data();
 
-      // If scooty already has a battery, block (Rule 2.2)
-      if(s.currentBatteryId){
-        throw new Error(`Your scooty already has battery ${s.currentBatteryId}. Return it first.`);
-      }
+    // If scooty already has a battery, block (Rule 2.2)
+    if(s.currentBatteryId){
+      throw new Error(`Your scooty already has battery ${s.currentBatteryId}. Return it first.`);
+    }
 
-      // Battery doc
-      const bSnap = await tx.get(bRef);
-      let b = bSnap.exists ? bSnap.data() : baseBatteryDoc(batteryId);
+    // If battery already linked, allow only if it's the SAME scooty (Rule 3.2.1.2)
+    const scootyId = s.scootyId || u.linkedScooter; // normalize id
+    if(b.assignedScootyId && b.assignedScootyId !== scootyId){
+      throw new Error('This battery belongs to another scooty. Please return your current battery first.');
+    }
+    if(b.assignedRiderEmail && b.assignedRiderEmail !== email){
+      throw new Error('This battery is held by another rider.');
+    }
 
-      // If battery is already linked → only allow if it belongs to THIS rider's scooty (Rule 3.2.1.2.1)
-      if(b.assignedScootyId && b.assignedScootyId !== s.scootyId){
-        throw new Error('This battery belongs to another scooty. Please return your current battery first.');
-      }
-      if(b.assignedRiderEmail && b.assignedRiderEmail !== email){
-        throw new Error('This battery is held by another rider.');
-      }
-
-      // Process: link battery to scooty and rider; update user & scooty
-      b.assignedScootyId = s.scootyId || u.linkedScooter; // ensure field exists
-      b.assignedRiderEmail = email;
-      b.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      s.scootyId = s.scootyId || u.linkedScooter; // normalize if created
-      s.currentBatteryId = batteryId;
-      s.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      tx.set(bRef, b, {merge:true});
-      tx.set(sRef, s, {merge:true});
-      tx.update(uRef, {
-        linkedBattery: batteryId,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      tx.set(db.collection('logs').doc(), {
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'register', deviceType:'battery', deviceId:batteryId, rawPayload:`battery:${batteryId}`
-      });
+    // Process (Rule 3.2.2): set both masters and user
+    tx.update(bRef, {
+      assignedScootyId: scootyId,
+      assignedRiderEmail: email,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     });
-  }
+    tx.update(sRef, {
+      scootyId: scootyId,
+      currentBatteryId: batteryId,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    tx.update(uRef, {
+      linkedBattery: batteryId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Log
+    tx.set(db.collection('logs').doc(), {
+      ts: firebase.firestore.FieldValue.serverTimestamp(),
+      email, action:'register', deviceType:'battery', deviceId:batteryId, rawPayload:`battery:${batteryId}`
+    });
+  });
+}
+
 
   // Return battery (Rule 4.2, 4.3)
-  async function returnBatteryTx(email, batteryId){
-    const uRef = db.collection('users').doc(email);
-    const bRef = db.collection('batteries').doc(batteryId);
+ async function returnBatteryTx(email, batteryId){
+  const uRef = db.collection('users').doc(email);
+  const bRef = await ensureBatteryDoc(batteryId); // ensure master exists
 
-    await db.runTransaction(async (tx)=>{
-      const uSnap = await tx.get(uRef);
-      if(!uSnap.exists) throw new Error('User doc missing.');
-      const u = uSnap.data();
+  await db.runTransaction(async (tx)=>{
+    const uSnap = await tx.get(uRef);
+    if(!uSnap.exists) throw new Error('User doc missing.');
+    const u = uSnap.data();
 
-      if(!u.linkedScooter) throw new Error('You must have a scooty to return its battery.');
-      if(u.linkedBattery !== batteryId) throw new Error('This is not your linked battery.');
+    if(!u.linkedScooter) throw new Error('You must have a scooty to return its battery.');
+    if(u.linkedBattery !== batteryId) throw new Error('This is not your linked battery.');
 
-      // Resolve scooty
-      const sRef = db.collection('scooties').doc(u.linkedScooter);
-      const sSnap = await tx.get(sRef);
-      if(!sSnap.exists) throw new Error('Scooty record missing.');
-      const s = sSnap.data();
+    const sRef = await ensureScootyDoc(u.linkedScooter);
+    const [sSnap, bSnap] = await Promise.all([tx.get(sRef), tx.get(bRef)]);
+    if(!sSnap.exists) throw new Error('Scooty record missing.');
+    const s = sSnap.data();
+    if(!bSnap.exists) throw new Error('Battery record missing.');
+    const b = bSnap.data();
 
-      // Preconditions: scanned battery must be the battery currently linked to the rider's scooty (4.2.1.1)
-      if(s.currentBatteryId !== batteryId){
-        throw new Error('Scan the battery currently linked to your scooty.');
-      }
+    const scootyId = s.scootyId || u.linkedScooter;
 
-      // Battery record
-      const bSnap = await tx.get(bRef);
-      if(!bSnap.exists) throw new Error('Battery record missing.');
-      const b = bSnap.data();
+    // Preconditions (Rule 4.2.1): must be the battery currently linked to rider’s scooty
+    if(s.currentBatteryId !== batteryId){
+      throw new Error('Scan the battery currently linked to your scooty.');
+    }
 
-      // Battery cannot belong to another scooty (4.2.1.2)
-      if(b.assignedScootyId && b.assignedScootyId !== s.scootyId){
-        throw new Error('This battery is linked to another scooty. Cannot return.');
-      }
+    // Battery cannot belong to another scooty (Rule 4.2.1.2)
+    if(b.assignedScootyId && b.assignedScootyId !== scootyId){
+      throw new Error('This battery is linked to another scooty. Cannot return.');
+    }
 
-      // Process: clear links on battery; clear battery on scooty; keep rider on scooty
-      b.assignedScootyId = null;
-      b.assignedRiderEmail = null;
-      b.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      s.currentBatteryId = null;
-      s.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-
-      tx.update(bRef, b);
-      tx.update(sRef, s);
-      tx.update(uRef, {
-        linkedBattery: null,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-      tx.set(db.collection('logs').doc(), {
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'deregister', deviceType:'battery', deviceId:batteryId, rawPayload:`battery:${batteryId}`
-      });
+    // Process (Rule 4.2.2): clear battery’s links; clear scooty’s battery; rider keeps scooty
+    tx.update(bRef, {
+      assignedScootyId: null,
+      assignedRiderEmail: null,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
     });
-  }
+    tx.update(sRef, {
+      currentBatteryId: null,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    tx.update(uRef, {
+      linkedBattery: null,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Log
+    tx.set(db.collection('logs').doc(), {
+      ts: firebase.firestore.FieldValue.serverTimestamp(),
+      email, action:'deregister', deviceType:'battery', deviceId:batteryId, rawPayload:`battery:${batteryId}`
+    });
+  });
+}
+
 
   /**************************************************************************
    * ========================= ROUTER: SUBMIT HANDLER =======================
