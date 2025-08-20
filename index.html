@@ -239,9 +239,6 @@
   const logList = document.getElementById('logList');
   const refreshLogs = document.getElementById('refreshLogs');
 
-  // === NEW: handy alias for server timestamps (safe to reuse)
-  const serverTS = firebase.firestore.FieldValue.serverTimestamp();
-
   /**************************************************************************
    * ========================= AUTHENTICATION ===============================
    * We use Firebase Google provider with a single-click popup sign-in.
@@ -274,34 +271,19 @@
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
-      // ==== EXISTING (kept): ensure legacy `users/{email}` doc exists for UI compatibility
+      // ensure user doc exists
       const uDocRef = db.collection('users').doc(user.email);
       const uDoc = await uDocRef.get();
       if(!uDoc.exists){
         await uDocRef.set({
           email: user.email,
           name: user.displayName||null,
-          createdAt: serverTS,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           linkedScooter: null,
           linkedBattery: null
         });
       }
-
-      // === NEW: ensure new master Rider doc exists in `riders/{email}`
-      const rDocRef = db.collection('riders').doc(user.email);
-      const rDoc = await rDocRef.get();
-      if(!rDoc.exists){
-        await rDocRef.set({
-          email: user.email,
-          name: user.displayName||null,
-          createdAt: serverTS,
-          updatedAt: serverTS,
-          currentScootyId: null,
-          currentBatteryId: null
-        });
-      }
-
-      // refresh user's linked devices (now reads from `riders` with fallback to `users`)
+      // refresh user's linked devices
       loadUserDevices();
       // refresh some recent logs
       loadLogs();
@@ -324,6 +306,7 @@
   let scanning = false;
   let scanInterval = null;
   let lastRawResult = null;
+  let lastParsedResult = { type: 'unknown', id: '', raw: '' };
 
   // helper: start camera
   async function startCamera(){
@@ -365,90 +348,120 @@
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
-    scanInterval = setInterval(()=>{
-      if(!scanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: "attemptBoth"});
-      if(code){
-        // got a QR result
-        lastRawResult = code.data.trim();
-        // === UPDATED: parse understands prefixes (scooter:/battery:) and devices.txt fallback
-        const parsed = parsePayload(lastRawResult);
-        lastDecoded.textContent = parsed.raw;
-        lastDeviceInfo.textContent = `${parsed.type.toUpperCase()}: ${parsed.id || '—'}`;
-        submitScanBtn.disabled = !!parsed.id; // enable when we have an ID
-        // brief flash on permissionStatus
-        permissionStatus.textContent = parsed.id ? `Detected ${parsed.type} ${parsed.id}` : `Scan detected; choose type`;
+    scanInterval = setInterval(async ()=>{
+      try{
+        if(!scanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: "attemptBoth"});
+        if(code){
+          // got a QR result
+          lastRawResult = code.data.trim();
+          lastDecoded.textContent = lastRawResult;
+
+          // YANA_RULE: Use async Firestore-backed / heuristic detection instead of devices.txt.
+          // Determine device type (async) and update UI accordingly.
+          try {
+            const parsed = await determineDeviceType(lastRawResult);
+            lastParsedResult = parsed;
+            lastDeviceInfo.textContent = parsed.type === 'unknown' ? `UNKNOWN: ${parsed.id}` : `${parsed.type.toUpperCase()}: ${parsed.id}`;
+            submitScanBtn.disabled = parsed.type === 'unknown';
+            permissionStatus.textContent = parsed.type === 'unknown' ? `Unknown device` : `Detected ${parsed.type} ${parsed.id}`;
+            console.log('Parsed QR', parsed);
+          } catch (err) {
+            console.error('Error determining device type', err);
+            permissionStatus.textContent = 'Parse error';
+            submitScanBtn.disabled = true;
+          }
+        }
+      }catch(err){
+        console.error('Scan loop error', err);
       }
     }, 300);
   }
 
   /**************************************************************************
-   * ========================= PARSING LOGIC =================================*/
-let validDevices = { scooter: [], battery: [] };
+   * ========================= PARSING LOGIC =================================
+   * YANA_RULE: Remove dependency on devices.txt; use heuristics + Firestore to
+   * determine whether a scanned ID is a scooter or a battery.
+   **************************************************************************/
 
-// Load devices.txt once (from GitHub Pages or Firebase hosting)
-async function loadValidDevices() {
-  try {
-    const res = await fetch("devices.txt"); // hosted alongside index.html
-    const text = await res.text();
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // YANA_RULE: determineDeviceType attempts the following (in order):
+  // 1) Respect scanMode dropdown if forced
+  // 2) Heuristics: YEV* -> scooter, YBT* -> battery, payload prefixes 'scooter:'/'battery:' or 'SC','BAT' variants
+  // 3) Firestore lookup: check devices collection for scooter_<ID> or battery_<ID>
+  // Returns {type: 'scooter'|'battery'|'unknown', id: '...', raw: '...'}
+  async function determineDeviceType(raw) {
+    if(!raw) return { type: 'unknown', id: '', raw };
 
-    const newDevices = { scooter: [], battery: [] };
-    for (const line of lines) {
-      const [type, id] = line.split(':').map(x => x.trim().toUpperCase());
-      if (type === "SCOOTER") newDevices.scooter.push(id);
-      if (type === "BATTERY") newDevices.battery.push(id);
+    const rawTrim = raw.trim();
+    let id = rawTrim;
+    // if payloads like scooter:SC001 or battery:BAT001, extract after colon
+    if(rawTrim.includes(':')) {
+      const parts = rawTrim.split(':');
+      id = parts.slice(1).join(':').trim();
+    }
+    id = id.toUpperCase();
+
+    // YANA_RULE: honor scanMode override
+    const mode = (scanMode && scanMode.value) ? scanMode.value : 'auto';
+    if(mode === 'scooter') return { type: 'scooter', id, raw: rawTrim };
+    if(mode === 'battery') return { type: 'battery', id, raw: rawTrim };
+
+    // YANA_RULE: heuristics for common prefixes
+    try {
+      if(/^YEV\d+/i.test(id) || /^SCOT|^SC\d+|^SC[0-9]/i.test(id) || /^SCOOTER/i.test(id) ) {
+        return { type: 'scooter', id, raw: rawTrim };
+      }
+      if(/^YBT\d+/i.test(id) || /^BAT\d+|^BATTERY/i.test(id)) {
+        return { type: 'battery', id, raw: rawTrim };
+      }
+    } catch (e) {
+      console.warn('Heuristic check failed', e);
     }
 
-    validDevices = newDevices;
-    console.log("✅ Devices loaded:", validDevices);
+    // YANA_RULE: fallback to Firestore devices lookup:
+    // Check scooter_<ID> and battery_<ID> docs to see if either exists
+    try {
+      const scooterRef = db.collection('devices').doc(`scooter_${id}`);
+      const batteryRef = db.collection('devices').doc(`battery_${id}`);
+      const [sSnap, bSnap] = await Promise.all([scooterRef.get(), batteryRef.get()]);
 
-  } catch (err) {
-    console.error("❌ Could not load devices.txt", err);
+      if(sSnap.exists){
+        const d = sSnap.data() || {};
+        return { type: 'scooter', id, raw: rawTrim, source: 'devices_collection', deviceDoc: d };
+      }
+      if(bSnap.exists){
+        const d = bSnap.data() || {};
+        return { type: 'battery', id, raw: rawTrim, source: 'devices_collection', deviceDoc: d };
+      }
+
+      // still unknown
+      console.warn('Unknown device id scanned:', id);
+      return { type: 'unknown', id, raw: rawTrim };
+    } catch (err) {
+      console.error('Firestore lookup failed when determining device type', err);
+      return { type: 'unknown', id, raw: rawTrim };
+    }
   }
-}
-
-// Call at page load
-loadValidDevices();
-
-// === UPDATED: Parse scanned payload with support for "scooter:ID" / "battery:ID" prefixes.
-// If type is unknown, we still return the cleaned ID so a forced mode can be applied.
-function parsePayload(raw) {
-  if (!raw) return { type: 'unknown', id: '', raw };
-
-  const clean = String(raw).trim();
-  const upper = clean.toUpperCase();
-
-  // 1) Prefix patterns (most reliable)
-  const scootyMatch = upper.match(/^SCOOTER[:\-\s]+([A-Z0-9\-\_]+)$/);
-  if (scootyMatch) return { type: 'scooter', id: scootyMatch[1], raw: clean };
-
-  const batteryMatch = upper.match(/^BATTERY[:\-\s]+([A-Z0-9\-\_]+)$/);
-  if (batteryMatch) return { type: 'battery', id: batteryMatch[1], raw: clean };
-
-  // 2) devices.txt allow-list (optional helper, not authoritative)
-  if (validDevices.scooter.includes(upper)) {
-    return { type: 'scooter', id: upper, raw: clean };
-  }
-  if (validDevices.battery.includes(upper)) {
-    return { type: 'battery', id: upper, raw: clean };
-  }
-
-  // 3) Unknown type, but return the cleaned ID so user can force the mode
-  return { type: 'unknown', id: upper, raw: clean };
-}
 
   /**************************************************************************
    * ========================= SUBMIT / REGISTER LOGIC =======================
-   * This now implements your master-list rules using:
-   *  - riders/{email}
-   *  - scooties/{ScootyID}
-   *  - batteries/{BatteryID}
-   * and keeps legacy users/{email} in sync for the existing UI.
+   * - ensures a user must sign in
+   * - ensures user can have only one scooter and one battery
+   * - toggles registration/deregistration when same device is scanned
+   * - logs every action in `logs` collection
+   *
+   * Firestore collections used:
+   *  - users (doc id = user.email) : { linkedScooter, linkedBattery, ... }
+   *  - devices (doc id = <type>_<ID>) :
+   *      scooter doc: { type:'scooter', linkedTo: email|null, currentBatteryId: null|batteryId, currentRiderEmail: email|null }
+   *      battery doc: { type:'battery', linkedTo: email|null, assignedScootyId: null|scooterId, assignedRiderEmail: email|null }
+   *  - logs (auto id) : {ts, email, action, deviceType, deviceId, rawPayload}
+   *
+   * YANA_RULE: All reads/writes are inside transactions with null checks.
    **************************************************************************/
   submitScanBtn.addEventListener('click', async ()=>{
     const user = auth.currentUser;
@@ -461,22 +474,15 @@ function parsePayload(raw) {
       return;
     }
 
-    // Parse the last scan
-    let parsed = parsePayload(lastRawResult);
+    // If determineDeviceType wasn't yet executed (rare) run it now
+    let parsed = lastParsedResult && lastParsedResult.raw === lastRawResult ? lastParsedResult : await determineDeviceType(lastRawResult);
 
-    // === NEW: if type is unknown, honor the dropdown (forced mode)
     if(parsed.type === 'unknown'){
-      const forced = scanMode.value;
-      if(forced === 'scooter' || forced === 'battery'){
-        parsed = { type: forced, id: parsed.id, raw: parsed.raw };
-        if(!parsed.id){
-          alert('Could not detect an ID from the QR. Please scan again.');
-          return;
-        }
-      } else {
-        alert('Unable to detect device type. Select "Force: Scooter" or "Force: Battery" and submit again.');
+      if(!confirm('Unable to detect device type (scooter/battery). Submit as plain device id?')) {
         return;
       }
+      alert('Unknown device type cannot be processed automatically. Use the scan-mode dropdown to force scooter or battery.');
+      return;
     }
 
     // perform transactional checks & updates
@@ -492,272 +498,273 @@ function parsePayload(raw) {
     }catch(e){
       submitScanBtn.disabled = false;
       permissionStatus.textContent = 'Error';
-      alert('Operation failed: ' + e.message);
+      alert('Operation failed: ' + (e && e.message ? e.message : e));
       console.error(e);
     }
   });
 
   /**
-   * === NEW: Firestore helpers (typed collection refs)
-   * These keep code readable and consistent.
-   */
-  function riderRef(email){ return db.collection('riders').doc(email); }
-  function legacyUserRef(email){ return db.collection('users').doc(email); } // for UI mirroring only
-  function scootyRef(id){ return db.collection('scooties').doc(id); }
-  function batteryRef(id){ return db.collection('batteries').doc(id); }
-
-  /**
-   * === NEW: processScan implements the 4 flows with your rules:
-   *  - Scooty Assignment
-   *  - Scooty Return
-   *  - Battery Assignment
-   *  - Battery Return
+   * processScan: core logic for register/deregister
+   * - Ensures atomicity using Firestore transactions
    *
-   * Decision:
-   *  - Scanning a SCOOTER will ASSIGN if rider has none; otherwise RETURN if it’s the same scooty.
-   *  - Scanning a BATTERY will ASSIGN if rider has none; otherwise RETURN if it’s the same battery.
-   *  - All invariants are enforced inside one transaction.
+   * YANA_RULE: This function enforces:
+   *  - scooter assignment, battery assignment preconditions
+   *  - scooter return with battery (clears rider+device+battery links together)
+   *  - battery return only (clears only battery links)
+   *  - auto-heal orphaned scooter->battery links
    */
   async function processScan(email, deviceType, deviceId, rawPayload){
-    const rRef = riderRef(email);
-    const uRef = legacyUserRef(email); // keep legacy UI mirrored (linkedScooter/linkedBattery)
+    if(!email) throw new Error('Missing user email');
+    if(!deviceType || !deviceId) throw new Error('Invalid device info');
+
+    // canonicalize device doc id (prefix with type to avoid conflicts)
+    const devDocId = `${deviceType}_${deviceId}`;
+    const userRef = db.collection('users').doc(email);
+    const devRef = db.collection('devices').doc(devDocId);
     const logsRef = db.collection('logs');
 
     await db.runTransaction(async (tx)=>{
-      // --- Load rider master
-      const riderSnap = await tx.get(rRef);
-      if(!riderSnap.exists) throw new Error('Rider profile missing. Please sign out and sign in again.');
-      const rider = riderSnap.data() || {};
-      const currentScootyId = rider.currentScootyId || null;
-      const currentBatteryId = rider.currentBatteryId || null;
+      const userSnap = await tx.get(userRef);
+      if(!userSnap.exists){
+        throw new Error('User document missing. Sign-in again.');
+      }
+      const userData = userSnap.data() || {};
+      const userLinkedScooter = userData.linkedScooter || null;
+      const userLinkedBattery = userData.linkedBattery || null;
 
-      // Helper for logs
-      const log = (action, extra={}) => {
-        tx.set(logsRef.doc(), {
-          ts: serverTS,
-          email,
-          action,
-          deviceType,
-          deviceId,
-          rawPayload,
-          ...extra
-        });
-      };
+      // get device doc (if exists)
+      let devSnap = await tx.get(devRef);
+      let devData = devSnap.exists ? (devSnap.data() || {}) : null;
 
-      // ============= SCOOTER BRANCH =============
+      // if device doc missing, create with canonical fields (YANA_RULE)
+      if(!devData){
+        if(deviceType === 'scooter') {
+          devData = { type: 'scooter', linkedTo: null, currentBatteryId: null, currentRiderEmail: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() };
+        } else {
+          devData = { type: 'battery', linkedTo: null, assignedScootyId: null, assignedRiderEmail: null, createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() };
+        }
+        tx.set(devRef, devData);
+      } else {
+        // ensure device doc has minimal fields (backfill absent fields)
+        if(deviceType === 'scooter') {
+          const patch = {};
+          if(typeof devData.currentBatteryId === 'undefined') patch.currentBatteryId = null;
+          if(typeof devData.currentRiderEmail === 'undefined') patch.currentRiderEmail = devData.linkedTo || null;
+          if(Object.keys(patch).length) tx.update(devRef, patch);
+        } else {
+          const patch = {};
+          if(typeof devData.assignedScootyId === 'undefined') patch.assignedScootyId = null;
+          if(typeof devData.assignedRiderEmail === 'undefined') patch.assignedRiderEmail = devData.linkedTo || null;
+          if(Object.keys(patch).length) tx.update(devRef, patch);
+        }
+      }
+
+      // YANA_RULE: Auto-heal invalid states for scooters that have a battery but no rider.
+      // If scooter doc has currentBatteryId but linkedTo (or currentRiderEmail) is null, we clear both sides.
+      if(deviceType === 'scooter') {
+        // if there's an orphaned battery on this scooter
+        if(devData && devData.currentBatteryId && !devData.linkedTo){
+          const orphanBatteryId = devData.currentBatteryId;
+          const batteryRef = db.collection('devices').doc(`battery_${orphanBatteryId}`);
+          const bSnap = await tx.get(batteryRef);
+          if(bSnap.exists){
+            const bData = bSnap.data() || {};
+            // clear battery assignment if it points to this scooter
+            if(bData.assignedScootyId === deviceId || bData.assignedScootyId === null) {
+              tx.update(batteryRef, { assignedScootyId: null, assignedRiderEmail: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+            }
+          }
+          // clear scooter's battery link
+          tx.update(devRef, { currentBatteryId: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+          // log auto_heal
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email: 'system',
+            action: 'auto_heal',
+            details: `Cleared orphan battery ${orphanBatteryId} from scooter ${deviceId} (no rider present)`,
+            deviceType: 'scooter',
+            deviceId,
+            rawPayload: rawPayload
+          });
+          // refresh local devData reflector
+          devData.currentBatteryId = null;
+        }
+      }
+
+      // Re-get updated devData snapshot if needed (optional)
+      // Now apply main logic depending on deviceType
+
       if(deviceType === 'scooter'){
-        const sRef = scootyRef(deviceId);
-        let sSnap = await tx.get(sRef);
-        let scooty = sSnap.exists ? sSnap.data() : null;
-
-        // If scooty doc doesn't exist, create it as available (safe default)
-        if(!scooty){
-          scooty = {
-            scootyId: deviceId,
-            currentBatteryId: null,
-            currentRiderEmail: null,
-            status: 'available',
-            lastUpdated: serverTS
-          };
-          tx.set(sRef, scooty);
+        // CASE A: user has no linked scooter -> attempt to link scooter
+        if(!userLinkedScooter){
+          // scooter must be unlinked
+          if(devData.linkedTo && devData.linkedTo !== email){
+            throw new Error(`Scooter ${deviceId} is already linked to another rider (${devData.linkedTo}).`);
+          }
+          // link scooter to user
+          tx.update(userRef, { linkedScooter: deviceId, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          tx.update(devRef, { linkedTo: email, currentRiderEmail: email, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action: 'register', deviceType: 'scooter', deviceId, rawPayload
+          });
+          return;
         }
 
-        // CASE A: Assign scooty (rider has none)
-        if(!currentScootyId){
-          // Preconditions:
-          if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
-            throw new Error(`Scooty ${deviceId} is already assigned to another rider (${scooty.currentRiderEmail}).`);
+        // CASE B: user already linked to a scooter
+        if(userLinkedScooter === deviceId){
+          // deregister scooter -> check if scooter has a battery -> if so, clear scooter+rider+battery together (Scooter Return with battery)
+          if(devData.currentBatteryId){
+            const batteryId = devData.currentBatteryId;
+            const batteryRef = db.collection('devices').doc(`battery_${batteryId}`);
+            const bSnap = await tx.get(batteryRef);
+            const bData = bSnap.exists ? bSnap.data() : null;
+
+            // Clear user linked fields
+            tx.update(userRef, { linkedScooter: null, linkedBattery: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+            // Clear scooter fields
+            tx.update(devRef, { linkedTo: null, currentBatteryId: null, currentRiderEmail: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+
+            // Clear battery fields — only if battery is indeed assigned to this scooter / rider
+            if(bData){
+              if(bData.assignedScootyId === deviceId || bData.assignedRiderEmail === email || bData.linkedTo === email){
+                tx.update(batteryRef, { assignedScootyId: null, assignedRiderEmail: null, linkedTo: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+              } else {
+                // as a safety, still clear assigned fields referencing this scooter
+                const patch = {};
+                if(bData.assignedScootyId === deviceId) patch.assignedScootyId = null;
+                if(bData.assignedRiderEmail === email) patch.assignedRiderEmail = null;
+                if(Object.keys(patch).length) tx.update(batteryRef, { ...patch, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+              }
+            }
+
+            tx.set(logsRef.doc(), {
+              ts: firebase.firestore.FieldValue.serverTimestamp(),
+              email, action: 'return_scooter_with_battery', deviceType: 'scooter', deviceId, batteryId, rawPayload
+            });
+            return;
           }
 
-          // Process:
-          tx.update(rRef, { currentScootyId: deviceId, updatedAt: serverTS });
-          // Mirror legacy users collection for existing UI
-          tx.set(uRef, { linkedScooter: deviceId, updatedAt: serverTS }, { merge: true });
+          // if scooter has no battery, simple deregister
+          tx.update(userRef, { linkedScooter: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+          tx.update(devRef, { linkedTo: null, currentRiderEmail: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action: 'deregister', deviceType: 'scooter', deviceId, rawPayload
+          });
+          return;
+        }
 
-          // Retain existing battery on the scooty (if any); also ensure master consistency
-          if(scooty.currentBatteryId){
-            const bRef = batteryRef(scooty.currentBatteryId);
-            const bSnap = await tx.get(bRef);
-            if(!bSnap.exists){
-              // Create missing battery doc to keep data consistent.
-              tx.set(bRef, {
-                batteryId: scooty.currentBatteryId,
-                assignedScootyId: deviceId,
-                assignedRiderEmail: null, // not auto-assign to rider on scooty assignment
-                status: 'available',
-                lastUpdated: serverTS
-              });
-            } else {
-              const b = bSnap.data() || {};
-              if(b.assignedScootyId && b.assignedScootyId !== deviceId){
-                // Fix inconsistency in the same transaction
-                tx.update(bRef, { assignedScootyId: deviceId, lastUpdated: serverTS });
-              }
+        // CASE C: user linked to a DIFFERENT scooter: reject and ask to deregister first
+        throw new Error(`You already have a linked scooter (${userLinkedScooter}). Please deregister it first by scanning that scooter's QR and submitting.`);
+
+      } else if(deviceType === 'battery'){
+        // Battery handling rules
+
+        // Precondition: Rider must have a scooter
+        if(!userLinkedScooter){
+          throw new Error('You must have a scooter linked before assigning a battery. Scan and register a scooter first.');
+        }
+
+        // CASE A: user has no linked battery -> attempt to link battery
+        if(!userLinkedBattery){
+          // battery must be free OR already linked to rider's scooter
+          // check devData.assignedScootyId or devData.linkedTo
+          if(devData.linkedTo && devData.linkedTo !== email){
+            // if assigned to someone else, reject
+            throw new Error(`Battery ${deviceId} is already linked to another rider (${devData.linkedTo}).`);
+          }
+          // allow assignment if battery is free OR assigned to this scooter
+          if(devData.assignedScootyId && devData.assignedScootyId !== userLinkedScooter){
+            throw new Error(`Battery ${deviceId} is assigned to scooter ${devData.assignedScootyId}. Cannot assign to your scooter ${userLinkedScooter}.`);
+          }
+
+          // All good: update battery, scooter, and user atomically
+          const batteryRef = devRef; // battery doc
+          const scooterRef = db.collection('devices').doc(`scooter_${userLinkedScooter}`);
+
+          // Update battery doc
+          tx.update(batteryRef, {
+            assignedScootyId: userLinkedScooter,
+            assignedRiderEmail: email,
+            linkedTo: email,
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          // Update scooter doc: set currentBatteryId if not already set or it's the same battery
+          const sSnap = await tx.get(scooterRef);
+          if(!sSnap.exists){
+            // create minimal scooter doc if missing (shouldn't usually happen)
+            tx.set(scooterRef, { type: 'scooter', linkedTo: email, currentBatteryId: deviceId, currentRiderEmail: email, createdAt: firebase.firestore.FieldValue.serverTimestamp(), lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+          } else {
+            const sData = sSnap.data() || {};
+            if(sData.currentBatteryId && sData.currentBatteryId !== deviceId){
+              throw new Error(`Your scooter already has battery ${sData.currentBatteryId}. Remove that battery first.`);
+            }
+            tx.update(scooterRef, { currentBatteryId: deviceId, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
+          }
+
+          // Update user doc
+          tx.update(userRef, { linkedBattery: deviceId, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+          // Log
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action: 'register', deviceType: 'battery', deviceId, scooterId: userLinkedScooter, rawPayload
+          });
+          return;
+        }
+
+        // CASE B: user already linked to a battery
+        if(userLinkedBattery === deviceId){
+          // Deregister battery only (Battery Return)
+          const batteryRef = devRef;
+          const scooterRef = db.collection('devices').doc(`scooter_${userLinkedScooter}`);
+
+          // Clear user -> battery link
+          tx.update(userRef, { linkedBattery: null, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+          // Clear scooter's currentBatteryId only if it references this battery
+          const sSnap = await tx.get(scooterRef);
+          if(sSnap.exists){
+            const sData = sSnap.data() || {};
+            if(sData.currentBatteryId === deviceId){
+              tx.update(scooterRef, { currentBatteryId: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
             }
           }
 
-          // Update scooty status/rider link
-          tx.update(sRef, { currentRiderEmail: email, status: 'in_use', lastUpdated: serverTS });
-
-          log('assign_scooty');
-          return;
-        }
-
-        // CASE B: Return scooty (toggle) if it's the same one
-        if(currentScootyId === deviceId){
-          // Preconditions: Scooty must have a battery linked
-          if(!scooty.currentBatteryId){
-            throw new Error('Scooty return is not allowed without a linked battery. Please link/scan its battery first.');
-          }
-          const bRef = batteryRef(scooty.currentBatteryId);
-          const bSnap = await tx.get(bRef);
-          const b = bSnap.exists ? (bSnap.data()||{}) : null;
-
-          // Process:
-          //  - Scooty: clear currentRiderEmail, keep currentBatteryId
-          tx.update(sRef, { currentRiderEmail: null, status: 'available', lastUpdated: serverTS });
-
-          //  - Battery: clear assignedRiderEmail, keep assignedScootyId
-          if(bSnap.exists){
-            tx.update(bRef, { assignedRiderEmail: null, lastUpdated: serverTS });
+          // Clear battery fields if linked to this user
+          if(devData.linkedTo === email || devData.assignedRiderEmail === email || devData.assignedScootyId === userLinkedScooter){
+            tx.update(batteryRef, { assignedScootyId: null, assignedRiderEmail: null, linkedTo: null, lastSeen: firebase.firestore.FieldValue.serverTimestamp() });
           }
 
-          //  - Rider: clear currentScootyId, keep currentBatteryId
-          tx.update(rRef, { currentScootyId: null, updatedAt: serverTS });
-          // Mirror legacy UI
-          tx.set(uRef, { linkedScooter: null, updatedAt: serverTS }, { merge: true });
-
-          log('return_scooty', { batteryId: scooty.currentBatteryId || null });
-          return;
-        }
-
-        // CASE C: Rider already has a different scooty
-        throw new Error(`You already have a linked scooty (${currentScootyId}). Please return it first by scanning that scooty.`);
-
-      } // end scooter branch
-
-      // ============= BATTERY BRANCH =============
-      if(deviceType === 'battery'){
-        const bRef = batteryRef(deviceId);
-        let bSnap = await tx.get(bRef);
-        let battery = bSnap.exists ? bSnap.data() : null;
-
-        // Create battery doc if missing (safe default)
-        if(!battery){
-          battery = {
-            batteryId: deviceId,
-            assignedScootyId: null,
-            assignedRiderEmail: null,
-            status: 'available',
-            lastUpdated: serverTS
-          };
-          tx.set(bRef, battery);
-        }
-
-        // Rider must have a scooty before taking a battery
-        if(!currentScootyId){
-          throw new Error('Please assign a scooty first before linking a battery.');
-        }
-
-        // CASE A: Assign battery (rider has none)
-        if(!currentBatteryId){
-          // Preconditions:
-          if(battery.assignedScootyId && battery.assignedScootyId !== currentScootyId){
-            // Battery is linked to a different scooty → block per rule 3.2.1.2.2
-            throw new Error('Please return your current battery. This battery is linked to another scooty.');
-          }
-
-          // Process:
-          //  - Battery: link to rider’s scooty and rider
-          tx.update(bRef, {
-            assignedScootyId: currentScootyId,
-            assignedRiderEmail: email,
-            status: 'in_use',
-            lastUpdated: serverTS
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action: 'return_battery', deviceType: 'battery', deviceId, scooterId: userLinkedScooter, rawPayload
           });
-
-          //  - Scooty: update currentBatteryId
-          const sRef = scootyRef(currentScootyId);
-          tx.set(sRef, { // use set+merge to be safe if doc was missing
-            scootyId: currentScootyId,
-            currentBatteryId: deviceId,
-            lastUpdated: serverTS
-          }, { merge: true });
-
-          //  - Rider: set currentBatteryId
-          tx.update(rRef, { currentBatteryId: deviceId, updatedAt: serverTS });
-          // Mirror legacy users
-          tx.set(uRef, { linkedBattery: deviceId, updatedAt: serverTS }, { merge: true });
-
-          log('assign_battery');
           return;
         }
 
-        // CASE B: Return battery (toggle) if it's the same one
-        if(currentBatteryId === deviceId){
-          // Preconditions: battery must be linked to rider’s own scooty (not someone else’s)
-          if(battery.assignedScootyId && battery.assignedScootyId !== currentScootyId){
-            throw new Error('This battery does not belong to your scooty. Cannot return.');
-          }
+        // CASE C: user already linked to a DIFFERENT battery
+        throw new Error(`You already have a linked battery (${userLinkedBattery}). Please return it first by scanning that battery's QR and submitting.`);
+      }
 
-          const sRef = scootyRef(currentScootyId);
-
-          // Process:
-          //  - Battery: clear both assigned fields
-          tx.update(bRef, {
-            assignedScootyId: null,
-            assignedRiderEmail: null,
-            status: 'available',
-            lastUpdated: serverTS
-          });
-
-          //  - Scooty: clear currentBatteryId, keep currentRiderEmail
-          tx.set(sRef, {
-            scootyId: currentScootyId,
-            currentBatteryId: null,
-            lastUpdated: serverTS
-          }, { merge: true });
-
-          //  - Rider: clear currentBatteryId (rider may still hold the scooty)
-          tx.update(rRef, { currentBatteryId: null, updatedAt: serverTS });
-          // Mirror legacy users
-          tx.set(uRef, { linkedBattery: null, updatedAt: serverTS }, { merge: true });
-
-          log('return_battery');
-          return;
-        }
-
-        // CASE C: Rider already has a different battery
-        throw new Error(`You already have a battery (${currentBatteryId}). Please return it first by scanning that battery.`);
-      } // end battery branch
-
-      // If we reach here, type was neither
-      throw new Error('Unsupported device type. Please scan a scooter or battery QR.');
-    }); // end transaction
+      // default safe fallback
+      throw new Error('Unhandled device type.');
+    });
   }
 
   /**************************************************************************
    * ========================= UI: load user & logs ==========================
    **************************************************************************/
-  // === UPDATED: Prefer `riders/{email}` for state. Fallback to legacy `users/{email}` if needed.
   async function loadUserDevices(){
     const user = auth.currentUser;
     if(!user) return;
-
-    // Try new master-list rider doc first
-    const rSnap = await db.collection('riders').doc(user.email).get();
-    if(rSnap.exists){
-      const r = rSnap.data() || {};
-      linkedScooter.textContent = r.currentScootyId || '—';
-      linkedBattery.textContent = r.currentBatteryId || '—';
-      return;
-    }
-
-    // Fallback (legacy)
-    const uSnap = await db.collection('users').doc(user.email).get();
-    const u = uSnap.exists ? (uSnap.data()||{}) : {};
-    linkedScooter.textContent = u.linkedScooter || '—';
-    linkedBattery.textContent = u.linkedBattery || '—';
+    const uDoc = await db.collection('users').doc(user.email).get();
+    const data = uDoc.exists ? uDoc.data() : null;
+    linkedScooter.textContent = data && data.linkedScooter ? data.linkedScooter : '—';
+    linkedBattery.textContent = data && data.linkedBattery ? data.linkedBattery : '—';
   }
 
   // load recent logs (last 50)
@@ -776,10 +783,10 @@ function parsePayload(raw) {
       const el = document.createElement('div');
       el.className = 'log-item';
       el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${(d.action||'').toUpperCase()}</strong> &nbsp; ${d.deviceType} <span style="opacity:.9">(${d.deviceId})</span></div>
+        <div><strong>${d.action ? d.action.toUpperCase() : 'LOG'}</strong> &nbsp; ${d.deviceType || ''} <span style="opacity:.9">(${d.deviceId || ''})</span></div>
         <div class="muted" style="font-size:12px">${when}</div>
       </div>
-      <div class="muted" style="margin-top:6px">user: ${d.email} • payload: <code>${escapeHtml(d.rawPayload||'')}</code></div>`;
+      <div class="muted" style="margin-top:6px">user: ${d.email || '—'} • payload: <code>${escapeHtml(d.rawPayload || '')}</code></div>`;
       logList.appendChild(el);
     });
   }
