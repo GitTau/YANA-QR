@@ -531,23 +531,27 @@
       const scootySnap = await tx.get(scootyRef);
       let scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:null, status:'free' };
 
-      // 1. If rider already linked with this scooter → return flow
+      let batteryRef = null, batterySnap = null;
+      if(scooty.currentBatteryId){
+        batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
+        batterySnap = await tx.get(batteryRef);
+
+        // 1. If rider already linked with this scooter → return flow
       if(user.linkedScooter === scooterId){
         if(!scooty.currentBatteryId){
           throw new Error("You do not have a battery");
         }
-        // Clear rider, scooter, battery together
-        const batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
-        const batterySnap = await tx.get(batteryRef);
-        if(batterySnap.exists){
-          tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
-        }
+        // Clear rider, scooter, battery
         tx.update(userRef, { linkedScooter:null, linkedBattery:null });
         tx.update(scootyRef, { currentRiderEmail:null, currentBatteryId:null });
+        if(batteryRef && batterySnap.exists){
+          tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
+        }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
         return;
       }
 
+       
       // 2. If rider already has another scooter
       if(user.linkedScooter && user.linkedScooter !== scooterId){
         throw new Error("Please return your current scooter first");
@@ -583,8 +587,7 @@
       if(user.linkedBattery === batteryId){
         tx.update(userRef, { linkedBattery:null });
         tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
-        if(user.linkedScooter){
-          const scootyRef = db.collection('scooters').doc(user.linkedScooter);
+        if(scootyRef && scootySnap.exists){
           tx.update(scootyRef, { currentBatteryId:null });
         }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
