@@ -28,10 +28,10 @@
       display:flex;align-items:center;gap:18px;margin-bottom:22px;
     }
     .logo{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
     }
     .brand{font-size:18px;font-weight:600}
     .sub{font-size:12px;color:var(--muted)}
@@ -62,17 +62,10 @@
     #video{width:100%;border-radius:12px; background:#000; height:360px;object-fit:cover;border:1px solid rgba(255,255,255,0.03)}
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
-    
 
-     <video id="video" playsinline style="width:100%; max-width:400px; border:2px solid #00eaff; border-radius:12px;"></video>
-     <p id="permissionStatus" style="color:white; text-align:center; margin-top:8px;">Camera idle</p>
-     <p id="lastDecoded" style="color:#00eaff; text-align:center;"></p>
-     <p id="lastDeviceInfo" style="color:#fff; text-align:center;"></p>
-     <button id="startCamBtn" class="action-btn">Start Scanner</button>
-     <button id="stopCamBtn" class="action-btn" style="display:none;">Stop Scanner</button>
-     <button id="submitScanBtn" class="action-btn" disabled>Submit Scan</button>
-
-
+    /* YANA_RULE: Removed accidental HTML tags that were inside <style>.
+       Those tags broke CSS parsing and could impact layout/rendering. */
+    /* (No other changes in CSS) */
 
     /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
@@ -94,9 +87,11 @@
   <div class="container">
     <!-- HEADER: logo, brand, signin, svg upload -->
     <header>
-    <img src="logo.svg" alt="App Logo" class="app-logo">
+      <img src="logo.svg" alt="App Logo" class="app-logo">
 
       <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
+        <!-- YANA_RULE: Wrap loose <rect>/<path> with a valid <svg> to fix broken markup -->
+        <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
           <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
           <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -157,7 +152,7 @@
 
       <!-- RIGHT: summary, device status, logs, upload logo -->
       <aside class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center">
           <div style="font-weight:700">Rider & Devices</div>
         </div>
 
@@ -189,7 +184,7 @@
   </div>
 
   <!-- ========== SCRIPTS ========== -->
-  <!-- Firebase JS SDKs (modular) -->
+  <!-- Firebase JS SDKs (modular compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -200,8 +195,6 @@
   <script>
   /**************************************************************************
    * ========================= IMPORTANT CONFIG ============================
-   * Replace the firebaseConfig below with what you provided (already done).
-   * This page uses Firebase Authentication (Google popup) + Firestore.
    **************************************************************************/
 
   const firebaseConfig = {
@@ -241,9 +234,6 @@
 
   /**************************************************************************
    * ========================= AUTHENTICATION ===============================
-   * We use Firebase Google provider with a single-click popup sign-in.
-   * If you want Google One-Tap later, you'll need an OAuth client ID
-   * from Google Cloud and small integration changes.
    **************************************************************************/
 
   signinBtn.addEventListener('click', async () => {
@@ -259,11 +249,8 @@
     }
   });
 
-  signoutBtn.addEventListener('click', async ()=>{
-    await auth.signOut();
-  });
+  signoutBtn.addEventListener('click', async ()=>{ await auth.signOut(); });
 
-  // Auth state change listener (updates UI & loads user doc)
   auth.onAuthStateChanged(async (user)=>{
     if(user){
       userEmailEl.textContent = user.email;
@@ -271,7 +258,6 @@
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
-      // ensure user doc exists
       const uDocRef = db.collection('users').doc(user.email);
       const uDoc = await uDocRef.get();
       if(!uDoc.exists){
@@ -283,9 +269,7 @@
           linkedBattery: null
         });
       }
-      // refresh user's linked devices
       loadUserDevices();
-      // refresh some recent logs
       loadLogs();
     } else {
       userEmailEl.textContent = 'Not signed in';
@@ -299,8 +283,7 @@
   });
 
   /**************************************************************************
-   * ========================= CAMERA & QR SCANNER ===========================
-   * We'll use getUserMedia, draw frames to a hidden canvas, run jsQR on them.
+   * ========================= CAMERA & QR SCANNER ==========================
    **************************************************************************/
   let stream = null;
   let scanning = false;
@@ -308,7 +291,6 @@
   let lastRawResult = null;
   let lastParsedResult = { type: 'unknown', id: '', raw: '' };
 
-  // helper: start camera
   async function startCamera(){
     try{
       permissionStatus.textContent = 'Requesting camera...';
@@ -326,24 +308,17 @@
       alert('Camera access is required for scanning. Please allow camera permissions and try again.');
     }
   }
-
-  // helper: stop camera
   function stopCamera(){
     scanning = false;
     permissionStatus.textContent = 'Camera stopped';
     startCamBtn.style.display = 'inline-block';
     stopCamBtn.style.display = 'none';
-    if(stream){
-      stream.getTracks().forEach(t=>t.stop());
-      stream = null;
-    }
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
     if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
   }
-
   startCamBtn.addEventListener('click', startCamera);
   stopCamBtn.addEventListener('click', stopCamera);
 
-  // main scan loop: create a canvas and run jsQR on image data every 300ms
   function scanLoop(){
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -357,12 +332,8 @@
         const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: "attemptBoth"});
         if(code){
-          // got a QR result
           lastRawResult = code.data.trim();
           lastDecoded.textContent = lastRawResult;
-
-          // YANA_RULE: Use async Firestore-backed / heuristic detection instead of devices.txt.
-          // Determine device type (async) and update UI accordingly.
           try {
             const parsed = await determineDeviceType(lastRawResult);
             lastParsedResult = parsed;
@@ -383,34 +354,23 @@
   }
 
   /**************************************************************************
-   * ========================= PARSING LOGIC =================================
-   * YANA_RULE: Remove dependency on devices.txt; use heuristics + Firestore to
-   * determine whether a scanned ID is a scooter or a battery.
+   * ========================= PARSING LOGIC ================================
    **************************************************************************/
-
-  // YANA_RULE: determineDeviceType attempts the following (in order):
-  // 1) Respect scanMode dropdown if forced
-  // 2) Heuristics: YEV* -> scooter, YBT* -> battery, payload prefixes 'scooter:'/'battery:' or 'SC','BAT' variants
-  // 3) Firestore lookup: check devices collection for scooter_<ID> or battery_<ID>
-  // Returns {type: 'scooter'|'battery'|'unknown', id: '...', raw: '...'}
   async function determineDeviceType(raw) {
     if(!raw) return { type: 'unknown', id: '', raw };
 
     const rawTrim = raw.trim();
     let id = rawTrim;
-    // if payloads like scooter:SC001 or battery:BAT001, extract after colon
     if(rawTrim.includes(':')) {
       const parts = rawTrim.split(':');
       id = parts.slice(1).join(':').trim();
     }
     id = id.toUpperCase();
 
-    // YANA_RULE: honor scanMode override
     const mode = (scanMode && scanMode.value) ? scanMode.value : 'auto';
     if(mode === 'scooter') return { type: 'scooter', id, raw: rawTrim };
     if(mode === 'battery') return { type: 'battery', id, raw: rawTrim };
 
-    // YANA_RULE: heuristics for common prefixes
     try {
       if(/^YEV\d+/i.test(id) || /^SCOT|^SC\d+|^SC[0-9]/i.test(id) || /^SCOOTER/i.test(id) ) {
         return { type: 'scooter', id, raw: rawTrim };
@@ -422,23 +382,12 @@
       console.warn('Heuristic check failed', e);
     }
 
-    // YANA_RULE: fallback to Firestore devices lookup:
-    // Check scooter_<ID> and battery_<ID> docs to see if either exists
     try {
       const scooterRef = db.collection('devices').doc(`scooter_${id}`);
       const batteryRef = db.collection('devices').doc(`battery_${id}`);
       const [sSnap, bSnap] = await Promise.all([scooterRef.get(), batteryRef.get()]);
-
-      if(sSnap.exists){
-        const d = sSnap.data() || {};
-        return { type: 'scooter', id, raw: rawTrim, source: 'devices_collection', deviceDoc: d };
-      }
-      if(bSnap.exists){
-        const d = bSnap.data() || {};
-        return { type: 'battery', id, raw: rawTrim, source: 'devices_collection', deviceDoc: d };
-      }
-
-      // still unknown
+      if(sSnap.exists){ return { type: 'scooter', id, raw: rawTrim, source: 'devices_collection' }; }
+      if(bSnap.exists){ return { type: 'battery', id, raw: rawTrim, source: 'devices_collection' }; }
       console.warn('Unknown device id scanned:', id);
       return { type: 'unknown', id, raw: rawTrim };
     } catch (err) {
@@ -448,44 +397,19 @@
   }
 
   /**************************************************************************
-   * ========================= SUBMIT / REGISTER LOGIC =======================
-   * - ensures a user must sign in
-   * - ensures user can have only one scooter and one battery
-   * - toggles registration/deregistration when same device is scanned
-   * - logs every action in `logs` collection
-   *
-   * Firestore collections used:
-   *  - users (doc id = user.email) : { linkedScooter, linkedBattery, ... }
-   *  - devices (doc id = <type>_<ID>) :
-   *      scooter doc: { type:'scooter', linkedTo: email|null, currentBatteryId: null|batteryId, currentRiderEmail: email|null }
-   *      battery doc: { type:'battery', linkedTo: email|null, assignedScootyId: null|scooterId, assignedRiderEmail: email|null }
-   *  - logs (auto id) : {ts, email, action, deviceType, deviceId, rawPayload}
-   *
-   * YANA_RULE: All reads/writes are inside transactions with null checks.
+   * ========================= SUBMIT / REGISTER LOGIC ======================
    **************************************************************************/
   submitScanBtn.addEventListener('click', async ()=>{
     const user = auth.currentUser;
-    if(!user){
-      alert('Please sign in with Google first.');
-      return;
-    }
-    if(!lastRawResult){
-      alert('No QR code scanned yet. Please scan and then submit.');
-      return;
-    }
+    if(!user){ alert('Please sign in with Google first.'); return; }
+    if(!lastRawResult){ alert('No QR code scanned yet. Please scan and then submit.'); return; }
 
-    // If determineDeviceType wasn't yet executed (rare) run it now
     let parsed = lastParsedResult && lastParsedResult.raw === lastRawResult ? lastParsedResult : await determineDeviceType(lastRawResult);
-
     if(parsed.type === 'unknown'){
-      if(!confirm('Unable to detect device type (scooter/battery). Submit as plain device id?')) {
-        return;
-      }
-      alert('Unknown device type cannot be processed automatically. Use the scan-mode dropdown to force scooter or battery.');
+      alert('Unknown device type. Use the scan-mode dropdown to force scooter or battery.');
       return;
     }
 
-    // perform transactional checks & updates
     try{
       submitScanBtn.disabled = true;
       permissionStatus.textContent = 'Processing...';
@@ -495,7 +419,6 @@
         await handleBatteryScan(user.email, parsed.id, parsed.raw);
       }
       permissionStatus.textContent = 'Done';
-      // update UI
       loadUserDevices();
       loadLogs();
       submitScanBtn.disabled = false;
@@ -508,118 +431,108 @@
   });
 
   /**
-   * processScan: core logic for register/deregister
-   * - Ensures atomicity using Firestore transactions
-   *
-   * YANA_RULE: This function enforces:
-   *  - scooter assignment, battery assignment preconditions
-   *  - scooter return with battery (clears rider+device+battery links together)
-   *  - battery return only (clears only battery links)
-   *  - auto-heal orphaned scooter->battery links
+   * YANA_RULE: Fix Firestore transaction order + flow.
    */
-  // YANA_RULE: handle scooter scan logic based on provided flow
+
+  // YANA_RULE: FIXED brace/flow so all logic is OUTSIDE the battery-read block.
   async function handleScooterScan(email, scooterId, rawPayload){
     const userRef = db.collection('users').doc(email);
     const scootyRef = db.collection('scooters').doc(scooterId);
     const logsRef = db.collection('logs');
 
     await db.runTransaction(async (tx)=>{
+      // READS FIRST
       const userSnap = await tx.get(userRef);
       if(!userSnap.exists) throw new Error('User doc missing');
       const user = userSnap.data();
 
       const scootySnap = await tx.get(scootyRef);
-      let scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:null, status:'free' };
+      const scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:null, status:'free' };
 
       let batteryRef = null, batterySnap = null;
       if(scooty.currentBatteryId){
         batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
         batterySnap = await tx.get(batteryRef);
+      } // YANA_RULE: <-- close the battery read block properly
 
-        // 1. If rider already linked with this scooter → return flow
+      // FLOW
       if(user.linkedScooter === scooterId){
-        if(!scooty.currentBatteryId){
-          throw new Error("You do not have a battery");
-        }
-        // Clear rider, scooter, battery
+        if(!scooty.currentBatteryId){ throw new Error("You do not have a battery"); }
         tx.update(userRef, { linkedScooter:null, linkedBattery:null });
-        tx.update(scootyRef, { currentRiderEmail:null, currentBatteryId:null });
-        if(batteryRef && batterySnap.exists){
+        tx.set(scootyRef, { currentRiderEmail:null, currentBatteryId:null }, { merge:true });
+        if(batteryRef && batterySnap && batterySnap.exists){
           tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
         }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
         return;
       }
 
-       
-      // 2. If rider already has another scooter
       if(user.linkedScooter && user.linkedScooter !== scooterId){
         throw new Error("Please return your current scooter first");
       }
 
-      // 3. If scooter is in use by another rider
       if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
         throw new Error("This scooter is already in use");
       }
 
-      // 4. Assign scooter
       tx.update(userRef, { linkedScooter:scooterId });
       tx.set(scootyRef, { currentRiderEmail:email, currentBatteryId:null, status:'assigned' }, { merge:true });
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
     });
   }
 
-  // YANA_RULE: handle battery scan logic based on provided flow
+  // YANA_RULE: define scootyRef/scootySnap when needed; delink battery even if scooter missing.
   async function handleBatteryScan(email, batteryId, rawPayload){
     const userRef = db.collection('users').doc(email);
     const batteryRef = db.collection('batteries').doc(batteryId);
     const logsRef = db.collection('logs');
 
     await db.runTransaction(async (tx)=>{
+      // READS FIRST
       const userSnap = await tx.get(userRef);
       if(!userSnap.exists) throw new Error('User doc missing');
       const user = userSnap.data();
 
       const batterySnap = await tx.get(batteryRef);
-      let battery = batterySnap.exists ? batterySnap.data() : { assignedScootyId:null, assignedRiderEmail:null, status:'free' };
+      const battery = batterySnap.exists ? batterySnap.data() : { assignedScootyId:null, assignedRiderEmail:null, status:'free' };
 
-      // 1. If rider linked with this battery → delink
+      let scootyRef = null, scootySnap = null;
+      if(user.linkedScooter){
+        scootyRef = db.collection('scooters').doc(user.linkedScooter);
+        scootySnap = await tx.get(scootyRef);
+      }
+
+      // FLOW
       if(user.linkedBattery === batteryId){
         tx.update(userRef, { linkedBattery:null });
         tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
-        if(scootyRef && scootySnap.exists){
+        if(scootyRef && scootySnap && scootySnap.exists){
           tx.update(scootyRef, { currentBatteryId:null });
         }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
         return;
       }
 
-      // 2. Rider must have a scooter to take a battery
       if(!user.linkedScooter){
         throw new Error("You do not have a scooter");
       }
 
-      // 3. If battery linked to another scooter
       if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
         throw new Error("Battery already in use");
       }
-
-      // 4. If battery linked to another rider
       if(battery.assignedRiderEmail && battery.assignedRiderEmail !== email){
         throw new Error("Battery already in use");
       }
 
-      // 5. Assign battery
       tx.update(userRef, { linkedBattery:batteryId });
       tx.set(batteryRef, { assignedScootyId:user.linkedScooter, assignedRiderEmail:email, status:'assigned' }, { merge:true });
-      const scootyRef = db.collection('scooters').doc(user.linkedScooter);
-      tx.update(scootyRef, { currentBatteryId:batteryId });
+      if(scootyRef){ tx.update(scootyRef, { currentBatteryId:batteryId }); }
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
     });
   }
 
   /**************************************************************************
-   * ========================= UI: load user & logs ==========================
+   * ========================= UI: load user & logs =========================
    **************************************************************************/
   async function loadUserDevices(){
     const user = auth.currentUser;
@@ -630,7 +543,6 @@
     linkedBattery.textContent = data && data.linkedBattery ? data.linkedBattery : '—';
   }
 
-  // load recent logs (last 50)
   async function loadLogs(){
     logList.innerHTML = `<div class="muted">Loading logs...</div>`;
     const q = db.collection('logs').orderBy('ts','desc').limit(50);
@@ -655,51 +567,11 @@
   }
   refreshLogs.addEventListener('click', loadLogs);
 
-  // helper to escape HTML
   function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  /**************************************************************************
-   * ========================= SVG UPLOAD (logo change) =====================
-   * Allows upload of an SVG file and replaces inline logo preview and main SVG.
-   **************************************************************************/
-  /*svgUpload.addEventListener('change', (ev)=>{
-    const f = ev.target.files[0];
-    if(!f) return;
-    if(!f.name.toLowerCase().endsWith('.svg')) return alert('Please upload an SVG file only.');
-    const reader = new FileReader();
-    reader.onload = (e)=>{
-      const contents = e.target.result;
-      // simple safety: replace the innerHTML of the preview and main logo
-      try{
-        svgPreview.innerHTML = contents;
-        // update main header logo too (if safe)
-        document.getElementById('logo-container').innerHTML = contents;
-      }catch(err){
-        alert('SVG parse error');
-        console.error(err);
-      }
-    };
-    reader.readAsText(f);
-  });
+  window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
 
-  // Clicking the logo also opens file upload (UX)
-  document.getElementById('logo-container').addEventListener('click', ()=> svgUpload.click());*/
-
-  /**************************************************************************
-   * ========================= UTIL: Page unload cleanup ====================
-   **************************************************************************/
-  window.addEventListener('beforeunload', ()=>{
-    if(stream) stream.getTracks().forEach(t=>t.stop());
-  });
-
-  /**************************************************************************
-   * ========================= INITIAL SIMPLE SETUP =========================
-   * Try to load logs once if the user is already signed in
-   **************************************************************************/
-  (async ()=>{
-    // nothing to do here beyond what onAuthStateChanged handles.
-  })();
-
+  (async ()=>{ /* onAuthStateChanged handles initial UI */ })();
   </script>
 </body>
 </html>
