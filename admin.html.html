@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Yana QR — Admin Panel</title>
+  <style>
+    body{
+      font-family: system-ui, sans-serif;
+      background: #0a0f12;
+      color: #eaf4f8;
+      margin: 0; padding: 20px;
+    }
+    h1{font-size: 20px; margin-bottom: 12px;}
+    .muted{color:#9aa6ac;font-size:13px;}
+    .btn{
+      padding:6px 12px; border-radius:8px; border:none; cursor:pointer;
+      font-weight:600; margin-right:6px;
+    }
+    .approve{background:#00eaff;color:#001;}
+    .reject{background:#ff4d4d;color:#fff;}
+    .signout{background:transparent;border:1px solid #555;color:#bbb;}
+    table{
+      width:100%; border-collapse: collapse; margin-top: 16px;
+    }
+    th, td{
+      border:1px solid rgba(255,255,255,0.1);
+      padding:8px; text-align:left;
+    }
+    th{background:rgba(255,255,255,0.05);}
+    tr:nth-child(even){background:rgba(255,255,255,0.02);}
+  </style>
+</head>
+<body>
+  <h1>Yana — Admin Panel</h1>
+  <div class="muted">Only admin can approve rider registrations</div>
+  <div style="margin:10px 0">
+    <span id="adminEmail">Not signed in</span>
+    <button id="signoutBtn" class="btn signout" style="display:none">Sign out</button>
+  </div>
+
+  <div id="notAdmin" style="display:none; color:#ff4d4d; font-weight:600;">
+    Access denied. You are not an admin.
+  </div>
+
+  <table id="usersTable" style="display:none">
+    <thead>
+      <tr>
+        <th>Name</th><th>Email</th><th>Phone</th><th>Aadhar</th><th>Status</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="usersBody"></tbody>
+  </table>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <script>
+  // YANA_ADMIN_PAGE: Firebase config (same project as index.html)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
+    authDomain: "yana-qr.firebaseapp.com",
+    projectId: "yana-qr",
+    storageBucket: "yana-qr.firebasestorage.app",
+    messagingSenderId: "905613005387",
+    appId: "1:905613005387:web:b0d8464d826972654b73ce",
+    measurementId: "G-9P9DLJGQHQ"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  const ADMIN_EMAIL = "vivek.rout99@gmail.com"; // YANA_ADMIN_PAGE: change here if needed
+
+  const adminEmailEl = document.getElementById('adminEmail');
+  const signoutBtn = document.getElementById('signoutBtn');
+  const usersTable = document.getElementById('usersTable');
+  const usersBody = document.getElementById('usersBody');
+  const notAdmin = document.getElementById('notAdmin');
+
+  // YANA_ADMIN_PAGE: Google login prompt if not already logged in
+  auth.onAuthStateChanged(async (user)=>{
+    if(user){
+      adminEmailEl.textContent = user.email;
+      signoutBtn.style.display = 'inline-block';
+      if(user.email === ADMIN_EMAIL){
+        notAdmin.style.display = 'none';
+        usersTable.style.display = '';
+        loadUsers();
+      } else {
+        notAdmin.style.display = 'block';
+        usersTable.style.display = 'none';
+      }
+    } else {
+      adminEmailEl.textContent = "Not signed in";
+      signoutBtn.style.display = 'none';
+      usersTable.style.display = 'none';
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try{ await auth.signInWithPopup(provider); }
+      catch(e){ console.error("Sign-in error", e); }
+    }
+  });
+
+  signoutBtn.addEventListener('click', ()=>auth.signOut());
+
+  // YANA_ADMIN_PAGE: Load all users for approval
+  async function loadUsers(){
+    usersBody.innerHTML = "";
+    const snap = await db.collection('users').orderBy("createdAt","desc").get();
+    snap.forEach(doc=>{
+      const u = doc.data();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${u.name || ""}</td>
+        <td>${u.email || ""}</td>
+        <td>${u.phone || ""}</td>
+        <td>${u.aadhar || ""}</td>
+        <td>${u.status || "pending"}</td>
+        <td>
+          <button class="btn approve">Approve</button>
+          <button class="btn reject">Reject</button>
+        </td>`;
+      const approveBtn = tr.querySelector(".approve");
+      const rejectBtn = tr.querySelector(".reject");
+
+      approveBtn.addEventListener('click', ()=>updateStatus(u.email,"approved"));
+      rejectBtn.addEventListener('click', ()=>updateStatus(u.email,"rejected"));
+
+      usersBody.appendChild(tr);
+    });
+  }
+
+  // YANA_ADMIN_PAGE: Update status
+  async function updateStatus(email, status){
+    if(!email) return;
+    await db.collection('users').doc(email).set({status}, {merge:true});
+    loadUsers();
+  }
+  </script>
+</body>
+</html>
