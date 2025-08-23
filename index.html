@@ -433,6 +433,9 @@
   /**
    * YANA_RULE: Fix Firestore transaction order + flow.
    */
+    function safeUpdateOrCreate(tx, ref, data) {
+       tx.set(ref, data, { merge: true });
+        }
 
   // YANA_RULE: FIXED brace/flow so all logic is OUTSIDE the battery-read block.
   async function handleScooterScan(email, scooterId, rawPayload){
@@ -458,10 +461,10 @@
       // FLOW
       if(user.linkedScooter === scooterId){
         if(!scooty.currentBatteryId){ throw new Error("You do not have a battery"); }
-        tx.update(userRef, { linkedScooter:null, linkedBattery:null });
+        safeUpdateOrCreate(tx, userRef, { linkedScooter: null, linkedBattery: null });
         tx.set(scootyRef, { currentRiderEmail:null, currentBatteryId:null }, { merge:true });
         if(batteryRef && batterySnap && batterySnap.exists){
-          tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
+          safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null });
         }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
         return;
@@ -505,7 +508,7 @@
       // FLOW
       if(user.linkedBattery === batteryId){
         tx.update(userRef, { linkedBattery:null });
-        tx.update(batteryRef, { assignedScootyId:null, assignedRiderEmail:null });
+        safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null });
         if(scootyRef && scootySnap && scootySnap.exists){
           tx.update(scootyRef, { currentBatteryId:null });
         }
