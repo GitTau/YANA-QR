@@ -498,7 +498,26 @@
       const user = userSnap.data();
 
       const scootySnap = await tx.get(scootyRef);
-      const scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:null, status:'free' };
+            const scootySnap = await tx.get(scootyRef);
+      let scooty;
+      if (!scootySnap.exists) {
+        // YANA_CHANGED: Create scooter doc if missing, with full schema
+        scooty = {
+          scootyId: scooterId,
+          currentBatteryId: null,
+          currentRiderEmail: null,
+          status: 'free'
+        };
+        tx.set(scootyRef, scooty); 
+      } else {
+        scooty = scootySnap.data();
+      }
+
+      // YANA_CHANGED: Enforce exclusivity
+      if (scooty.currentRiderEmail && scooty.currentRiderEmail !== email) {
+        throw new Error("This scooter is already assigned to another rider.");
+      }
+
 
       let batteryRef = null, batterySnap = null, battery = null;
       if(scooty.currentBatteryId){
