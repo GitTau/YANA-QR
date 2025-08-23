@@ -498,7 +498,6 @@
       const user = userSnap.data();
 
       const scootySnap = await tx.get(scootyRef);
-            const scootySnap = await tx.get(scootyRef);
       let scooty;
       if (!scootySnap.exists) {
         // YANA_CHANGED: Create scooter doc if missing, with full schema
