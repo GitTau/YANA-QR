@@ -5,30 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Yana QR — Admin Panel</title>
   <style>
-    body{
-      font-family: system-ui, sans-serif;
-      background: #0a0f12;
-      color: #eaf4f8;
-      margin: 0; padding: 20px;
-    }
-    h1{font-size: 20px; margin-bottom: 12px;}
-    .muted{color:#9aa6ac;font-size:13px;}
-    .btn{
-      padding:6px 12px; border-radius:8px; border:none; cursor:pointer;
-      font-weight:600; margin-right:6px;
-    }
-    .approve{background:#00eaff;color:#001;}
-    .reject{background:#ff4d4d;color:#fff;}
-    .signout{background:transparent;border:1px solid #555;color:#bbb;}
-    table{
-      width:100%; border-collapse: collapse; margin-top: 16px;
-    }
-    th, td{
-      border:1px solid rgba(255,255,255,0.1);
-      padding:8px; text-align:left;
-    }
-    th{background:rgba(255,255,255,0.05);}
-    tr:nth-child(even){background:rgba(255,255,255,0.02);}
+    body{font-family:system-ui,sans-serif;background:#0a0f12;color:#eaf4f8;margin:0;padding:20px}
+    h1{font-size:20px;margin-bottom:12px}
+    .muted{color:#9aa6ac;font-size:13px}
+    .btn{padding:6px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600;margin-right:6px}
+    .approve{background:#00eaff;color:#001}
+    .reject{background:#ff4d4d;color:#fff}
+    .signout{background:transparent;border:1px solid #555;color:#bbb}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    th,td{border:1px solid rgba(255,255,255,0.1);padding:8px;text-align:left}
+    th{background:rgba(255,255,255,0.05)}
+    tr:nth-child(even){background:rgba(255,255,255,0.02)}
+    .pill{padding:2px 8px;border-radius:999px;font-size:12px}
+    .pending{background:#444;color:#fff}
+    .approved{background:#00eaff;color:#001}
+    .rejected{background:#ff4d4d;color:#fff}
   </style>
 </head>
 <body>
@@ -37,16 +28,17 @@
   <div style="margin:10px 0">
     <span id="adminEmail">Not signed in</span>
     <button id="signoutBtn" class="btn signout" style="display:none">Sign out</button>
+    <button id="refreshBtn" class="btn signout" style="margin-left:6px">Refresh</button>
   </div>
 
-  <div id="notAdmin" style="display:none; color:#ff4d4d; font-weight:600;">
+  <div id="notAdmin" style="display:none;color:#ff4d4d;font-weight:600">
     Access denied. You are not an admin.
   </div>
 
   <table id="usersTable" style="display:none">
     <thead>
       <tr>
-        <th>Name</th><th>Email</th><th>Phone</th><th>Aadhar</th><th>Status</th><th>Actions</th>
+        <th>Name</th><th>Email</th><th>Phone</th><th>Aadhar</th><th>Submitted</th><th>Status</th><th>Actions</th>
       </tr>
     </thead>
     <tbody id="usersBody"></tbody>
@@ -58,7 +50,6 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
 
   <script>
-  // YANA_ADMIN_PAGE: Firebase config (same project as index.html)
   const firebaseConfig = {
     apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
     authDomain: "yana-qr.firebaseapp.com",
@@ -72,27 +63,23 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
 
-  const ADMIN_EMAIL = "vivek.rout99@gmail.com"; // YANA_ADMIN_PAGE
+  const ADMIN_EMAIL = "vivek.rout99@gmail.com"; // change if needed
 
   const adminEmailEl = document.getElementById('adminEmail');
   const signoutBtn = document.getElementById('signoutBtn');
   const usersTable = document.getElementById('usersTable');
   const usersBody = document.getElementById('usersBody');
   const notAdmin = document.getElementById('notAdmin');
+  const refreshBtn = document.getElementById('refreshBtn');
 
-  // YANA_ADMIN_PAGE: normalize doc ids to lowercase emails
-  function normEmail(email){ return (email||'').trim().toLowerCase(); }
-
-  // YANA_ADMIN_PAGE: Google login prompt if not already logged in
   auth.onAuthStateChanged(async (user)=>{
     if(user){
-      const emailLc = normEmail(user.email);
-      adminEmailEl.textContent = emailLc;
+      adminEmailEl.textContent = user.email;
       signoutBtn.style.display = 'inline-block';
-      if(emailLc === normEmail(ADMIN_EMAIL)){
+      if(user.email === ADMIN_EMAIL){
         notAdmin.style.display = 'none';
         usersTable.style.display = '';
-        loadUsers();
+        await loadUsers();
       } else {
         notAdmin.style.display = 'block';
         usersTable.style.display = 'none';
@@ -108,42 +95,67 @@
   });
 
   signoutBtn.addEventListener('click', ()=>auth.signOut());
+  refreshBtn.addEventListener('click', loadUsers);
 
-  // YANA_ADMIN_PAGE: Load all users (avoid createdAt dependency)
   async function loadUsers(){
     usersBody.innerHTML = "";
-    // YANA_ADMIN_PAGE: No orderBy('createdAt') to avoid missing field/index issues
-    const snap = await db.collection('users').orderBy('email').get();
+    let snap = null;
+    // Prefer submittedAt (most recent submissions first)
+    try{
+      snap = await db.collection('users').orderBy("submittedAt","desc").get();
+    }catch(e1){
+      try{
+        snap = await db.collection('users').orderBy("createdAt","desc").get();
+      }catch(e2){
+        // Fallback: unordered
+        snap = await db.collection('users').get();
+      }
+    }
+
+    // Client-side sort by (submittedAt || createdAt) desc so newest registrations bubble up
+    const rows = [];
     snap.forEach(doc=>{
-      const u = doc.data();
+      const u = doc.data() || {};
+      rows.push({ id: doc.id, ...u });
+    });
+    rows.sort((a,b)=>{
+      const ta = (a.submittedAt && a.submittedAt.toMillis ? a.submittedAt.toMillis() : 0) || (a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0) || 0;
+      const tb = (b.submittedAt && b.submittedAt.toMillis ? b.submittedAt.toMillis() : 0) || (b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0) || 0;
+      return tb - ta;
+    });
+
+    for(const u of rows){
       const tr = document.createElement('tr');
+      const status = (u.status || 'pending').toLowerCase();
+      const pillClass = status === 'approved' ? 'approved' : (status === 'rejected' ? 'rejected' : 'pending');
+      const submittedStr = (u.submittedAt && u.submittedAt.toDate) ? u.submittedAt.toDate().toLocaleString() :
+                           (u.createdAt && u.createdAt.toDate ? u.createdAt.toDate().toLocaleString() : '—');
       tr.innerHTML = `
-        <td>${u.name || ""}</td>
-        <td>${u.email || ""}</td>
-        <td>${u.phone || ""}</td>
-        <td>${u.aadhar || ""}</td>
-        <td>${u.status || "pending"}</td>
+        <td>${escapeHtml(u.name || "")}</td>
+        <td>${escapeHtml(u.email || u.id || "")}</td>
+        <td>${escapeHtml(u.phone || "")}</td>
+        <td>${escapeHtml(u.aadhar || "")}</td>
+        <td>${submittedStr}</td>
+        <td><span class="pill ${pillClass}">${status}</span></td>
         <td>
           <button class="btn approve">Approve</button>
           <button class="btn reject">Reject</button>
         </td>`;
       const approveBtn = tr.querySelector(".approve");
       const rejectBtn = tr.querySelector(".reject");
-
-      approveBtn.addEventListener('click', ()=>updateStatus(u.email,"approved"));
-      rejectBtn.addEventListener('click', ()=>updateStatus(u.email,"rejected"));
-
+      approveBtn.addEventListener('click', ()=>updateStatus(u.email || u.id, "approved"));
+      rejectBtn.addEventListener('click', ()=>updateStatus(u.email || u.id, "rejected"));
       usersBody.appendChild(tr);
-    });
+    }
   }
 
-  // YANA_ADMIN_PAGE: Update status with normalized doc id
   async function updateStatus(email, status){
-    const id = normEmail(email);
-    if(!id) return;
-    await db.collection('users').doc(id).set({status}, {merge:true});
-    loadUsers();
+    if(!email) return;
+    await db.collection('users').doc(email).set({status}, {merge:true});
+    await loadUsers();
   }
+
+  function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   </script>
 </body>
 </html>
