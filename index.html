@@ -352,6 +352,8 @@
         const parsed = await parsePayload(code.data);
         lastParsedResult = parsed;
         lastDeviceInfo.textContent = parsed.type + ' → ' + (parsed.id || '—');
+
+        stopCamera();
       }
     }, 400);
   }
