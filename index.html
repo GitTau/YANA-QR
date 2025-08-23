@@ -106,8 +106,18 @@
         <div class="status">Last decoded: <span id="lastDecoded">—</span></div>
         <div class="status">Parsed: <span id="lastDeviceInfo">—</span></div>
 
+        <!-- Location dropdown (mandatory) -->
+        <div style="margin:10px 0;">
+          <label class="muted" style="font-size:12px">Select Location</label>
+          <select id="locationSelect" class="small" style="background:rgba(255,255,255,0.06);color:#fff;padding:8px;border-radius:10px">
+            <option value="">-- Choose Location --</option>
+            <option value="ZAP POINT OD02">ZAP POINT OD02</option>
+            <option value="BB STORE - Satyanagar">BB STORE - Satyanagar</option>
+          </select>
+        </div>
+
         <div style="display:flex;gap:8px;align-items:center">
-          <button id="submitScan" class="btn">Submit</button>
+          <button id="submitScan" class="btn" disabled>Submit</button>
           <div class="muted">Submits the detected scooter/battery based on the mode</div>
         </div>
 
@@ -141,6 +151,9 @@
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
   <script>
+  /*******************************
+   * Firebase init
+   *******************************/
   const firebaseConfig = {
     apiKey: "AIzaSyCP7KKqJhtauDVonZ-6ApHRitu7CCdV0Ns",
     authDomain: "yana-qr.firebaseapp.com",
@@ -154,6 +167,9 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
 
+  /*******************************
+   * Elements & state
+   *******************************/
   const video = document.getElementById('video');
   const startCamBtn = document.getElementById('startCam');
   const stopCamBtn = document.getElementById('stopCam');
@@ -170,7 +186,11 @@
   const linkedBattery = document.getElementById('linkedBattery');
   const logList = document.getElementById('logList');
   const refreshLogs = document.getElementById('refreshLogs');
+  const locationSelect = document.getElementById('locationSelect');
 
+  /*******************************
+   * Auth
+   *******************************/
   signinBtn.addEventListener('click', async () => {
     try{
       signinBtn.disabled = true;
@@ -212,10 +232,7 @@
         }
       });
 
-      // Attach registration submit handler (idempotent attach)
       attachRegistrationHandler();
-
-      // Decide which UI to show
       checkUserStatus(user.email, user.displayName);
     } else {
       userEmailEl.textContent = 'Not signed in';
@@ -231,6 +248,9 @@
     }
   });
 
+  /*******************************
+   * UI helpers & registration
+   *******************************/
   async function checkUserStatus(email, displayName) {
     try{
       const userRef = db.collection('users').doc(email);
@@ -302,6 +322,9 @@
     });
   }
 
+  /*******************************
+   * Camera & QR scanning
+   *******************************/
   let stream = null;
   let scanning = false;
   let scanInterval = null;
@@ -352,6 +375,8 @@
         const parsed = await parsePayload(code.data);
         lastParsedResult = parsed;
         lastDeviceInfo.textContent = parsed.type + ' → ' + (parsed.id || '—');
+
+        // one-shot mode: stop scanning safely
         scanning = false;
         setTimeout(() => stopCamera(), 50);
       }
@@ -363,7 +388,7 @@
     if(!rawTrim){ return { type:'unknown', id:'', raw:rawTrim }; }
 
     // Direct patterns: YEVxxx / YBTxxx
-    let m = rawTrim.match(/^(YEV\\d+|YBT\\d+)$/i);
+    let m = rawTrim.match(/^(YEV\d+|YBT\d+)$/i);
     if(m){
       const id = m[1].toUpperCase();
       const type = /^YEV/i.test(id) ? 'scooter' : 'battery';
@@ -371,7 +396,7 @@
     }
 
     // Legacy prefixes
-    m = rawTrim.match(/^(scooter|battery)\\s*:\\s*([A-Za-z0-9_-]+)$/i);
+    m = rawTrim.match(/^(scooter|battery)\s*:\s*([A-Za-z0-9_-]+)$/i);
     if(m){
       const id = m[2].toUpperCase();
       const type = m[1].toLowerCase();
@@ -380,10 +405,10 @@
 
     // Heuristic candidate
     const candidateId = rawTrim.toUpperCase().replace(/[^A-Z0-9:_-]/g, '');
-    if(/^YEV\\d+/.test(candidateId) || /^SCOOT/.test(candidateId)){
+    if(/^YEV\d+/.test(candidateId) || /^SCOOT/.test(candidateId)){
       return { type:'scooter', id:candidateId, raw:rawTrim, source:'heuristic' };
     }
-    if(/^YBT\\d+/.test(candidateId) || /^BAT\\d+/.test(candidateId) || /^BATTERY/.test(candidateId)){
+    if(/^YBT\d+/.test(candidateId) || /^BAT\d+/.test(candidateId) || /^BATTERY/.test(candidateId)){
       return { type:'battery', id:candidateId, raw:rawTrim, source:'heuristic' };
     }
 
@@ -415,7 +440,20 @@
     return { type:'unknown', id:'', raw:rawTrim };
   }
 
+  /*******************************
+   * Submit handler (location mandatory)
+   *******************************/
+  // Enable/disable submit button based on location selection
+  locationSelect.addEventListener('change', () => {
+    submitScanBtn.disabled = !locationSelect.value;
+  });
+
   submitScanBtn.addEventListener('click', async ()=>{
+    const location = (locationSelect.value || '').trim();
+    if(!location){
+      alert('Please select a location before submitting.');
+      return;
+    }
     const mode = scanMode.value;
     if(lastParsedResult.type === 'unknown' || !lastParsedResult.id){
       alert('No valid scooter/battery detected yet.');
@@ -427,9 +465,9 @@
     }
     try{
       if(lastParsedResult.type === 'scooter'){
-        await assignOrReturnScooter(lastParsedResult.id, lastParsedResult.raw);
+        await assignOrReturnScooter(lastParsedResult.id, lastParsedResult.raw, location);
       } else if(lastParsedResult.type === 'battery'){
-        await assignOrReturnBattery(lastParsedResult.id, lastParsedResult.raw);
+        await assignOrReturnBattery(lastParsedResult.id, lastParsedResult.raw, location);
       }
     }catch(err){
       console.error(err);
@@ -437,6 +475,9 @@
     }
   });
 
+  /*******************************
+   * Refs & helpers
+   *******************************/
   function userDocRef(email){ return db.collection('users').doc(email); }
   function scootyDocRef(scooterId){ return db.collection('scooties').doc(scooterId); }
   function batteryDocRef(batteryId){ return db.collection('batteries').doc(batteryId); }
@@ -464,14 +505,18 @@
       const d = doc.data() || {};
       const el = document.createElement('li');
       el.className = 'log-item';
-      el.innerHTML = '<div style="font-weight:600">' + (d.action||'').replace(/_/g,' ') + '</div>' +
-                     '<div class="muted">' + (d.deviceType||'-') + ' • ' + (d.deviceId||'-') + '</div>' +
-                     '<div class="muted" style="margin-top:6px">user: ' + (d.email||'-') + '</div>';
+      const actionLine = '<div style="font-weight:600">' + (d.action||'').replace(/_/g,' ') + '</div>';
+      const metaLine = '<div class="muted">' + (d.deviceType||'-') + ' • ' + (d.deviceId||'-') + (d.location ? ' • ' + d.location : '') + '</div>';
+      const userLine = '<div class="muted" style="margin-top:6px">user: ' + (d.email||'-') + '</div>';
+      el.innerHTML = actionLine + metaLine + userLine;
       logList.appendChild(el);
     });
   }
 
-  async function assignOrReturnScooter(scooterId, rawPayload){
+  /*******************************
+   * Scooter assign/return (with battery-first rule)
+   *******************************/
+  async function assignOrReturnScooter(scooterId, rawPayload, location){
     if(!scooterId) throw new Error('Invalid scooter id');
     const u = auth.currentUser;
     if(!u) throw new Error('Not signed in');
@@ -500,26 +545,43 @@
         scooty = scootySnap.data();
       }
 
+      // RETURN case: rider currently has this scooter --> they want to return it
       if(user.linkedScooter === scooterId){
-        // ✅ Remove battery requirement and unlink only the scooter
-      tx.set(userRef, { linkedScooter: null }, { merge: true });
-      tx.set(scootyRef, { scootyId: scooterId, currentRiderEmail: null, currentBatteryId: null, status: 'free' }, { merge: true });
-
-      // If a battery was mounted on the scooter, detach it from the scooter
-      // but keep it assigned to the rider (battery remains "assigned").
-      if (scooty.currentBatteryId) {
-        const batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
-        tx.set(batteryRef, {
-          batteryId: scooty.currentBatteryId,
-          assignedScootyId: null,
-          // keep assignedRiderEmail as-is so battery remains linked to rider
-          status: 'assigned'
-        }, { merge: true });
+        // NEW RULE: require battery be returned first
+        if(user.linkedBattery){
+          // log the attempted blocked return
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action:'error_battery_first',
+            deviceType:'scooter', deviceId:scooterId, location, rawPayload
+          });
+          throw new Error("Please return the battery first before returning the scooter.");
         }
-        tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action: 'return_scooter', deviceType: 'scooter', deviceId: scooterId, rawPayload });
+
+        // proceed to unlink scooter only
+        tx.set(userRef, { linkedScooter: null }, { merge: true });
+        tx.set(scootyRef, { scootyId: scooterId, currentRiderEmail: null, currentBatteryId: null, status: 'free' }, { merge: true });
+
+        // if any battery physically mounted on scooter, detach it (safe-clean)
+        if (scooty.currentBatteryId){
+          const batteryRef = batteryDocRef(scooty.currentBatteryId);
+          tx.set(batteryRef, {
+            batteryId: scooty.currentBatteryId,
+            assignedScootyId: null,
+            assignedRiderEmail: null,
+            status: 'free'
+          }, { merge:true });
+        }
+
+        tx.set(logsRef.doc(), {
+          ts: firebase.firestore.FieldValue.serverTimestamp(),
+          email, action:'return_scooter',
+          deviceType:'scooter', deviceId:scooterId, location, rawPayload
+        });
         return;
       }
 
+      // ASSIGN case: rider does not have a scooter yet -> assign
       if(user.linkedScooter){
         throw new Error("You already have a scooter assigned.");
       }
@@ -529,14 +591,21 @@
 
       tx.set(userRef, { linkedScooter: scooterId }, { merge:true });
       tx.set(scootyRef, { currentRiderEmail: email, status:'assigned' }, { merge:true });
-      tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action:'assign_scooter', deviceType:'scooter', deviceId:scooterId, rawPayload });
+      tx.set(logsRef.doc(), {
+        ts: firebase.firestore.FieldValue.serverTimestamp(),
+        email, action:'assign_scooter',
+        deviceType:'scooter', deviceId:scooterId, location, rawPayload
+      });
     });
 
     await loadUserDevices();
     await loadLogs();
   }
 
-  async function assignOrReturnBattery(batteryId, rawPayload){
+  /*******************************
+   * Battery assign/return (works even if scooter returned)
+   *******************************/
+  async function assignOrReturnBattery(batteryId, rawPayload, location){
     if(!batteryId) throw new Error('Invalid battery id');
     const u = auth.currentUser;
     if(!u) throw new Error('Not signed in');
@@ -550,13 +619,14 @@
 
       const isReturningThisBattery = (user.linkedBattery === batteryId);
 
-      // ✅ If no scooter is linked, allow only "return" of the same battery.
+      // If no scooter is linked, allow only "return" of the same battery.
       // Block new assignments as before.
       if(!user.linkedScooter && !isReturningThisBattery){
         throw new Error("Assign a scooter first.");
       }
 
       const batteryRef = batteryDocRef(batteryId);
+
       // If returning the battery, we may not have a scooter anymore.
       // Only fetch/modify scooter when it exists.
       let scootyRef = null, scootySnap = null, scooty = null;
@@ -569,7 +639,7 @@
       const batterySnap = await tx.get(batteryRef);
       let battery = batterySnap.exists ? (batterySnap.data()||{}) : { batteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free' };
 
-      // ✅ Return branch (works even if scooter was already returned)
+      // Return branch (works even if scooter was already returned)
       if(isReturningThisBattery){
         // If a scooter is still linked, clear its battery slot; otherwise skip.
         if (scootyRef && scooty) {
@@ -577,10 +647,15 @@
         }
         tx.set(userRef, { linkedBattery: null }, { merge: true });
         tx.set(batteryRef, { assignedScootyId: null, assignedRiderEmail: null, status: 'free' }, { merge: true });
-        tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action: 'return_battery', deviceType: 'battery', deviceId: batteryId, rawPayload });
+        tx.set(logsRef.doc(), {
+          ts: firebase.firestore.FieldValue.serverTimestamp(),
+          email, action:'return_battery',
+          deviceType:'battery', deviceId:batteryId, location, rawPayload
+        });
         return;
-}
+      }
 
+      // Assignment checks (unchanged)
       if(user.linkedBattery && user.linkedBattery !== batteryId){
         throw new Error("Please return your current battery first.");
       }
@@ -590,20 +665,29 @@
       if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
         throw new Error("This battery is already assigned to another scooter.");
       }
-      if(scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
+      if(scooty && scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
         throw new Error("This scooter already has a different battery.");
       }
 
       tx.set(userRef, { linkedBattery:batteryId }, { merge:true });
       tx.set(batteryRef, { batteryId, assignedScootyId:user.linkedScooter, assignedRiderEmail:email, status:'assigned' }, { merge:true });
-      tx.set(scootyRef, { currentBatteryId:batteryId, status:'assigned' }, { merge:true });
-      tx.set(logsRef.doc(), { ts:firebase.firestore.FieldValue.serverTimestamp(), email, action:'assign_battery', deviceType:'battery', deviceId:batteryId, rawPayload });
+      if(scootyRef){
+        tx.set(scootyRef, { currentBatteryId:batteryId, status:'assigned' }, { merge:true });
+      }
+      tx.set(logsRef.doc(), {
+        ts:firebase.firestore.FieldValue.serverTimestamp(),
+        email, action:'assign_battery',
+        deviceType:'battery', deviceId:batteryId, location, rawPayload
+      });
     });
 
     await loadUserDevices();
     await loadLogs();
   }
 
+  /*******************************
+   * Misc
+   *******************************/
   refreshLogs.addEventListener('click', loadLogs);
   window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
   </script>
