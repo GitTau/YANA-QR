@@ -12,13 +12,11 @@
       --bg:#000;
       --action:#00eaff;
       --muted: #9aa6ac;
-      --card:#0b0b0b;
-      --glass: rgba(255,255,255,0.03);
-      --accent-text: #001f23;
-      --radius:14px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      --glass: rgba(255,255,255,0.06);
+      --glass2: rgba(255,255,255,0.08);
+      --radius: 14px;
     }
-    html,body{height:100%;margin:0;background:var(--bg);color:#fff;}
+    html,body{background:#0a0f12;color:#eaf4f8;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans",sans-serif;line-height:1.4}
     *{box-sizing:border-box}
     .container{
       max-width:1100px;margin:28px auto;padding:24px;
@@ -70,27 +68,25 @@
     /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
     .log-list{max-height:380px;overflow:auto;margin-top:8px;padding-right:8px}
-    .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.01);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
+    .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
     .muted{color:var(--muted);font-size:13px}
 
     /* input & file */
     .file-input{display:flex;gap:8px;align-items:center}
-    .logo-preview{width:56px;height:56px;border-radius:8px;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden}
-    input[type=file]{display:none}
-    label.file-btn{padding:8px 10px;border-radius:10px;border:1px dashed rgba(255,255,255,0.06);cursor:pointer;font-size:13px;color:var(--muted)}
+    .logo-preview{width:56px;height:56px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden}
 
-    footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+    /* YANA_ADMIN_CHANGE: registration form styles */
+    #registrationUI .form-input{
+      width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.04);color:#fff;outline:none;
+    }
+    #registrationUI label{display:block;margin-bottom:6px}
   </style>
 </head>
-
 <body>
   <div class="container">
-    <!-- HEADER: logo, brand, signin, svg upload -->
-    <header>
-      <img src="logo.svg" alt="App Logo" class="app-logo">
-
-      <div class="logo card" id="logo-container" title="Click to upload new SVG logo (below)">
-        <!-- YANA_RULE: Wrap loose <rect>/<path> with a valid <svg> to fix broken markup -->
+    <header class="logo card">
+      <div style="display:flex;gap:12px;align-items:center">
         <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
           <rect x="2" y="2" width="20" height="20" rx="4" fill="#00eaff" />
           <path d="M7 12h10M12 7v10" stroke="#001f23" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -109,7 +105,32 @@
       </div>
     </header>
 
-    <div class="grid">
+      <!-- YANA_ADMIN_CHANGE: Registration UI (shown when user status = pending) -->
+      <div id="registrationUI" class="card" style="display:none; margin-bottom:18px;">
+        <div style="font-weight:700;margin-bottom:10px">Rider Registration</div>
+        <div class="muted" style="margin-bottom:10px">Please complete your details. Admin will approve your access.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+          <div><div class="muted" style="font-size:12px">Name</div><div id="regName" style="font-weight:600">—</div></div>
+          <div><div class="muted" style="font-size:12px">Email</div><div id="regEmail" style="font-weight:600">—</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="muted" style="font-size:12px">Phone Number</label>
+            <input id="regPhone" class="form-input" type="text" placeholder="Enter phone number">
+          </div>
+          <div>
+            <label class="muted" style="font-size:12px">Aadhar Number</label>
+            <input id="regAadhar" class="form-input" type="text" placeholder="Enter Aadhar number">
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button id="submitRegistration" class="btn small">Submit Registration</button>
+          <div class="muted" style="font-size:12px">Status: <span id="regStatus">Pending</span></div>
+        </div>
+      </div>
+
+    <!-- YANA_ADMIN_CHANGE: Added appMain wrapper for gating scanner UI by approval status -->
+      <div id="appMain" class="grid">
       <!-- LEFT: Scanner + controls -->
       <div class="card scanner">
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -124,29 +145,35 @@
           <button id="startCam" class="btn small">Start Camera</button>
           <button id="stopCam" class="btn small ghost">Stop Camera</button>
 
-          <select id="scanMode" class="small" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff;padding:8px;border-radius:10px">
-            <option value="auto">Auto-detect (scooter/battery)</option>
-            <option value="scooter">Force: Scooter</option>
-            <option value="battery">Force: Battery</option>
+          <select id="scanMode" class="small" style="background:rgba(255,255,255,0.06);color:#fff;padding:8px;border-radius:10px">
+            <option value="auto">Auto-detect</option>
+            <option value="scooter">Scooter</option>
+            <option value="battery">Battery</option>
           </select>
 
-          <div id="permissionStatus" class="status">Camera idle</div>
+          <div class="status" id="permissionStatus">Camera idle</div>
         </div>
 
-        <!-- last scan + action -->
-        <div class="info-row">
-          <div>
-            <div class="muted">Last decoded</div>
-            <div id="lastDecoded" style="font-weight:700">—</div>
-            <div class="muted" id="lastDeviceInfo">—</div>
-          </div>
-          <div style="text-align:right">
-            <button id="submitScan" class="btn small" disabled>Submit</button>
+        <!-- scanner meta -->
+        <div class="status">Last decoded: <span id="lastDecoded">—</span></div>
+        <div class="status">Parsed: <span id="lastDeviceInfo">—</span></div>
+
+        <!-- submit -->
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="submitScan" class="btn">Submit</button>
+          <div class="muted">Submits the detected scooter/battery based on the mode</div>
+        </div>
+
+        <div class="card" style="padding:12px">
+          <div style="font-weight:700">Help</div>
+          <div class="muted" style="font-size:13px">Codes like <code>YEV001</code> / <code>YBT001</code> or <code>scooter:YEV001</code> / <code>battery:YBT001</code> work best. Plain IDs are auto-detected.</div>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+            <div style="font-weight:700">Scan examples</div>
             <div class="muted" style="margin-top:6px;font-size:12px">Scan → Submit</div>
           </div>
         </div>
 
-        <div class="muted" style="margin-top:8px;font-size:13px">Tip: QR payloads like <code>scooter:SC001</code> or <code>battery:BAT100</code> work best. Plain IDs are auto-detected.</div>
+        <div class="muted" style="margin-top:8px;font-size:13px">Examples: <code>YEV100</code> / <code>YBT100</code> work best. Plain IDs are auto-detected.</div>
 
       </div>
 
@@ -156,26 +183,21 @@
           <div style="font-weight:700">Rider & Devices</div>
         </div>
 
-        <div style="margin-top:12px">
-          <div class="muted">Signed-in rider</div>
-          <div id="riderInfo" style="font-weight:700;margin-top:6px">—</div>
-
-          <div style="margin-top:12px" class="muted">Linked scooter</div>
-          <div id="linkedScooter" style="font-weight:700;margin-top:6px">—</div>
-
-          <div style="margin-top:12px" class="muted">Linked battery</div>
-          <div id="linkedBattery" style="font-weight:700;margin-top:6px">—</div>
+        <div style="margin-top:8px">
+          <div class="info-row"><div class="muted">Rider</div><div id="riderInfo">—</div></div>
+          <div class="info-row"><div class="muted">Linked scooter</div><div id="linkedScooter">—</div></div>
+          <div class="info-row"><div class="muted">Linked battery</div><div id="linkedBattery">—</div></div>
         </div>
 
-        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:14px 0">
+        <div style="margin-top:14px">
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+            <div style="font-weight:700">Recent logs</div>
+            <button id="refreshLogs" class="btn small ghost">Refresh</button>
+          </div>
 
-        <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
-          <div style="font-weight:700">Recent logs</div>
-          <button id="refreshLogs" class="btn small ghost">Refresh</button>
-        </div>
-
-        <div class="log-list" id="logList">
-          <!-- dynamic logs -->
+          <div class="log-list" id="logList">
+            <!-- dynamic logs -->
+          </div>
         </div>
       </aside>
     </div>
@@ -184,12 +206,9 @@
   </div>
 
   <!-- ========== SCRIPTS ========== -->
-  <!-- Firebase JS SDKs (modular compat) -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
-  <!-- QR decoding library: jsQR (lightweight) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
   <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
   <script>
@@ -258,19 +277,91 @@
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
+      // YANA_ADMIN_CHANGE: ensure user doc exists with registration fields and status gating
       const uDocRef = db.collection('users').doc(user.email);
-      const uDoc = await uDocRef.get();
-      if(!uDoc.exists){
-        await uDocRef.set({
-          email: user.email,
-          name: user.displayName||null,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          linkedScooter: null,
-          linkedBattery: null
-        });
+
+  // YANA_ADMIN_CHANGE: Show correct UI based on user status and load data accordingly
+  async function checkUserStatus(email, displayName) {
+    try{
+      const userRef = db.collection('users').doc(email);
+      const snap = await userRef.get();
+      if(!snap.exists){ 
+        // Should not happen, but keep scanner hidden just in case
+        document.getElementById('appMain').style.display = 'none';
+        document.getElementById('registrationUI').style.display = 'none';
+        return;
       }
-      loadUserDevices();
-      loadLogs();
+      const data = snap.data() || {};
+      if(data.status === 'approved'){
+        // Show main app, hide registration
+        document.getElementById('appMain').style.display = '';
+        document.getElementById('registrationUI').style.display = 'none';
+        // load rider & logs views
+        loadUserDevices();
+        loadLogs();
+      } else if(data.status === 'pending' || !data.status){
+        // Hide app, show registration
+        document.getElementById('appMain').style.display = 'none';
+        document.getElementById('registrationUI').style.display = '';
+        document.getElementById('regName').textContent = displayName || '';
+        document.getElementById('regEmail').textContent = email || '';
+        document.getElementById('regStatus').textContent = 'Pending';
+      } else if(data.status === 'rejected'){
+        document.getElementById('appMain').style.display = 'none';
+        document.getElementById('registrationUI').style.display = 'none';
+        alert('Your registration has been rejected. Please contact support.');
+      } else {
+        // unknown state -> default to pending UI
+        document.getElementById('appMain').style.display = 'none';
+        document.getElementById('registrationUI').style.display = '';
+      }
+    }catch(e){
+      console.error('Status check error', e);
+    }
+  }
+
+  // YANA_ADMIN_CHANGE: Registration submit handler (saves phone & aadhar, remains pending for admin approval)
+  (function attachRegistrationHandler(){
+    const btn = document.getElementById('submitRegistration');
+    if(!btn) return;
+    btn.addEventListener('click', async ()=>{
+      try{
+        const u = auth.currentUser;
+        if(!u){ alert('Please sign in first'); return; }
+        const phone = (document.getElementById('regPhone').value||'').trim();
+        const aadhar = (document.getElementById('regAadhar').value||'').trim();
+        if(!phone || !aadhar){
+          alert('Please enter phone and aadhar.');
+          return;
+        }
+        await db.collection('users').doc(u.email).set({
+          phone, aadhar, status:'pending'
+        }, { merge:true });
+        document.getElementById('regStatus').textContent = 'Pending (submitted)';
+        alert('Registration submitted. Wait for admin approval.');
+      }catch(err){
+        console.error('Registration submit error', err);
+        alert('Failed to submit registration.');
+      }
+    });
+  })();
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(uDocRef);
+        if (!snap.exists) {
+          tx.set(uDocRef, {
+            email: user.email,
+            name: user.displayName || "",
+            phone: null,
+            aadhar: null,
+            status: "pending",
+            linkedScooter: null,
+            linkedBattery: null,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+      });
+      // YANA_ADMIN_CHANGE: Decide which UI to show
+      checkUserStatus(user.email, user.displayName);
     } else {
       userEmailEl.textContent = 'Not signed in';
       riderInfo.textContent = '—';
@@ -279,6 +370,11 @@
       signinBtn.style.display = 'inline-block';
       signoutBtn.style.display = 'none';
       logList.innerHTML = '';
+      // YANA_ADMIN_CHANGE: hide both main app and registration when signed out
+      const appMainEl = document.getElementById('appMain');
+      const regEl = document.getElementById('registrationUI');
+      if(appMainEl) appMainEl.style.display = 'none';
+      if(regEl) regEl.style.display = 'none';
     }
   });
 
@@ -324,74 +420,52 @@
 
   function scanLoop(){
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
+    const ctx = canvas.getContext('2d',{ willReadFrequently:true });
     scanInterval = setInterval(async ()=>{
-      try{
-        if(!scanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video,0,0,canvas.width,canvas.height);
-        const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts: "attemptBoth"});
-        if(code){
-          lastRawResult = code.data.trim();
-          lastDecoded.textContent = lastRawResult;
-          try {
-            const parsed = await determineDeviceType(lastRawResult);
-            lastParsedResult = parsed;
-            lastDeviceInfo.textContent = parsed.type === 'unknown' ? `UNKNOWN: ${parsed.id}` : `${parsed.type.toUpperCase()}: ${parsed.id}`;
-            submitScanBtn.disabled = parsed.type === 'unknown';
-            permissionStatus.textContent = parsed.type === 'unknown' ? `Unknown device` : `Detected ${parsed.type} ${parsed.id}`;
-            console.log('Parsed QR', parsed);
-          } catch (err) {
-            console.error('Error determining device type', err);
-            permissionStatus.textContent = 'Parse error';
-            submitScanBtn.disabled = true;
-          }
-        }
-      }catch(err){
-        console.error('Scan loop error', err);
+      if(!scanning || !video.videoWidth) return;
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code = jsQR(imageData.data, canvas.width, canvas.height);
+      if(code && code.data && code.data !== lastRawResult){
+        lastRawResult = code.data;
+        lastDecoded.textContent = code.data;
+        const parsed = await parsePayload(code.data);
+        lastParsedResult = parsed;
+        lastDeviceInfo.textContent = `${parsed.type} → ${parsed.id || '—'}`;
       }
-    }, 300);
+    }, 400);
   }
 
   /**************************************************************************
-   * ========================= SMALL HELPERS ================================
+   * ========================= QR PARSE ====================================
    **************************************************************************/
+  async function parsePayload(raw){
+    // Accept 'scooter:ID' or 'battery:ID' and new YEVxxx / YBTxxx
+    const rawTrim = (raw||'').trim();
+    if(!rawTrim){ return { type:'unknown', id:'', raw:rawTrim }; }
 
-  // YANA_CHANGED: helper to write structured logs to Firestore from non-transaction flows (errors, unknown_qr).
-  async function logOutOfBand(payload){
+    // YANA_RULE: Accept both new and legacy formats robustly
+    // 1) direct patterns like "YEV001" / "YBT001"
+    let m = rawTrim.match(/^(YEV\d+|YBT\d+)$/i);
+    if(m){
+      const id = m[1].toUpperCase();
+      const type = /^YEV/i.test(id) ? 'scooter' : 'battery';
+      return { type, id, raw: rawTrim, source:'direct_pattern' };
+    }
+
+    // 2) legacy 'scooter:ID' or 'battery:ID'
+    m = rawTrim.match(/^(scooter|battery)\s*:\s*([A-Za-z0-9_-]+)$/i);
+    if(m){
+      const id = m[2].toUpperCase();
+      const type = m[1].toLowerCase();
+      return { type, id, raw: rawTrim, source:'legacy_prefix' };
+    }
+
+    // 3) Heuristics for plain ids
     try{
-      await db.collection('logs').add({
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        ...payload
-      });
-    }catch(e){
-      console.warn('Failed to write log', e);
-    }
-  }
-
-  /**************************************************************************
-   * ========================= PARSING LOGIC ================================
-   **************************************************************************/
-  async function determineDeviceType(raw) {
-    if(!raw) return { type: 'unknown', id: '', raw };
-
-    const rawTrim = raw.trim();
-    let id = rawTrim;
-    if(rawTrim.includes(':')) {
-      const parts = rawTrim.split(':');
-      id = parts.slice(1).join(':').trim();
-    }
-    id = id.toUpperCase();
-
-    const mode = (scanMode && scanMode.value) ? scanMode.value : 'auto';
-    if(mode === 'scooter') return { type: 'scooter', id, raw: rawTrim };
-    if(mode === 'battery') return { type: 'battery', id, raw: rawTrim };
-
-    try {
-      if(/^YEV\d+/i.test(id) || /^SCOT|^SC\d+|^SC[0-9]/i.test(id) || /^SCOOTER/i.test(id) ) {
+      const id = rawTrim.toUpperCase().replace(/[^A-Z0-9:_-]/g, '');
+      if(/^YEV\d+/i.test(id) || /^SCOOT/i.test(id) || /^SCOOTER/i.test(id)) {
         return { type: 'scooter', id, raw: rawTrim };
       }
       if(/^YBT\d+/i.test(id) || /^BAT\d+|^BATTERY/i.test(id)) {
@@ -422,98 +496,115 @@
         console.warn('Unknown device id scanned:', id);
         permissionStatus.textContent = `Unknown QR: ${id}`;
       }
-      return { type: 'unknown', id, raw: rawTrim };
-    } catch (err) {
-      console.error('Firestore lookup failed when determining device type', err);
-      return { type: 'unknown', id, raw: rawTrim };
+    } catch(e){
+      console.warn('devices lookup failed', e);
     }
+
+    return { type:'unknown', id:'', raw:rawTrim };
   }
 
   /**************************************************************************
-   * ========================= SUBMIT / REGISTER LOGIC ======================
+   * ========================= SUBMIT LOGIC ================================
    **************************************************************************/
-  // YANA_CHANGED: ensure we always re-enable the Submit button and write an error log on failure.
   submitScanBtn.addEventListener('click', async ()=>{
-    const user = auth.currentUser;
-    if(!user){ alert('Please sign in with Google first.'); return; }
-    if(!lastRawResult){ alert('No QR code scanned yet. Please scan and then submit.'); return; }
-
-    let parsed = lastParsedResult && lastParsedResult.raw === lastRawResult ? lastParsedResult : await determineDeviceType(lastRawResult);
-    if(parsed.type === 'unknown'){
-      alert('Unknown device type. Use the scan-mode dropdown to force scooter or battery.');
+    const mode = scanMode.value;
+    if(lastParsedResult.type === 'unknown' || !lastParsedResult.id){
+      alert('No valid scooter/battery detected yet.');
       return;
     }
-
-    permissionStatus.textContent = 'Processing...';
-    submitScanBtn.disabled = true;
+    if(mode !== 'auto' && mode !== lastParsedResult.type){
+      alert(`Scan mode is "${mode}" but QR parsed as "${lastParsedResult.type}". Please fix mode or rescan.`);
+      return;
+    }
     try{
-      let note = '';
-      if(parsed.type === 'scooter'){
-        note = await handleScooterScan(user.email, parsed.id, parsed.raw);
-      } else if(parsed.type === 'battery'){
-        note = await handleBatteryScan(user.email, parsed.id, parsed.raw);
+      if(lastParsedResult.type === 'scooter'){
+        await assignOrReturnScooter(lastParsedResult.id, lastParsedResult.raw);
+      } else if(lastParsedResult.type === 'battery'){
+        await assignOrReturnBattery(lastParsedResult.id, lastParsedResult.raw);
       }
-      permissionStatus.textContent = note ? `Done — ${note}` : 'Done';
-      loadUserDevices();
-      loadLogs();
-    }catch(e){
-      permissionStatus.textContent = 'Error';
-      alert('Operation failed: ' + (e && e.message ? e.message : e));
-      console.error(e);
-      // YANA_CHANGED: persist error to logs for audit/debug
-      await logOutOfBand({
-        email: user.email,
-        action: 'error',
-        deviceType: parsed.type,
-        deviceId: parsed.id,
-        rawPayload: parsed.raw,
-        message: e && e.message ? e.message : String(e)
-      });
-    } finally {
-      // YANA_CHANGED: ensure button is always re-enabled in every path
-      submitScanBtn.disabled = false;
+    }catch(err){
+      console.error(err);
+      alert(err.message || 'Submit failed.');
     }
   });
 
-  /**
-   * YANA_RULE: Fix Firestore transaction order + flow.
-   */
-  function safeUpdateOrCreate(tx, ref, data) {
-    tx.set(ref, data, { merge: true });
-  }
-
-
-    // YANA_CHANGED: Strong invariants — enforce exclusivity and full schema update
-async function handleScooterScan(email, scooterId, rawPayload){
-  const userRef = db.collection('users').doc(email);
-  const scootyRef = db.collection('scooters').doc(scooterId);
+  /**************************************************************************
+   * ========================= TRANSACTION HELPERS ==========================
+   **************************************************************************/
+  function userDocRef(email){ return db.collection('users').doc(email); }
+  function scootyDocRef(scooterId){ return db.collection('scooties').doc(scooterId); }
+  function batteryDocRef(batteryId){ return db.collection('batteries').doc(batteryId); }
   const logsRef = db.collection('logs');
 
-  let summary = '';
+  async function logOutOfBand(d){
+    try{ await logsRef.add({ ts: firebase.firestore.FieldValue.serverTimestamp(), ...d }); }
+    catch(e){ console.warn('logOutOfBand failed', e); }
+  }
 
-  await db.runTransaction(async (tx)=>{
-    // === READ all relevant docs ===
-    const userSnap = await tx.get(userRef);
-    if(!userSnap.exists) throw new Error('User doc missing');
-    const user = userSnap.data();
+  async function loadUserDevices(){
+    const u = auth.currentUser;
+    if(!u) return;
+    const snap = await userDocRef(u.email).get();
+    const data = snap.exists ? snap.data() : {};
+    riderInfo.textContent = `${u.displayName || 'Rider'} (${u.email})`;
+    linkedScooter.textContent = data.linkedScooter || '—';
+    linkedBattery.textContent = data.linkedBattery || '—';
+  }
 
-    const scootySnap = await tx.get(scootyRef);
-    let scooty;
-    if (!scootySnap.exists) {
-      // Create scooter doc with full schema
-      scooty = {
-        scootyId: scooterId,
-        currentBatteryId: null,
-        currentRiderEmail: null,
-        status: 'free'
-      };
-      tx.set(scootyRef, scooty);
-    } else {
-      scooty = scootySnap.data();
-    }
+  async function loadLogs(){
+    logList.innerHTML = '';
+    const q = await logsRef.orderBy('ts', 'desc').limit(25).get();
+    q.forEach(doc=>{
+      const d = doc.data() || {};
+      const el = document.createElement('li');
+      el.className = 'log-item';
+      el.innerHTML = `<div style="font-weight:600">${(d.action||'').replace(/_/g,' ')}</div>
+      <div class="muted">${d.deviceType || '-'} • ${d.deviceId || '-'}</div>
+      <div class="muted" style="margin-top:6px">user: ${d.email || '-'}</div>`;
+      logList.appendChild(el);
+    });
+  }
 
-    // === CASE 1: returning scooter ===
-    if(user.linkedScooter === scooterId){
+  /**************************************************************************
+   * ========================= SCOOTER ASSIGN/RETURN =======================
+   **************************************************************************/
+  async function assignOrReturnScooter(scooterId, rawPayload){
+    if(!scooterId) throw new Error('Invalid scooter id');
+    const u = auth.currentUser;
+    if(!u) throw new Error('Not signed in');
+
+    await db.runTransaction(async (tx)=>{
+      const email = u.email;
+      const userRef = userDocRef(email);
+      const scootyRef = scootyDocRef(scooterId);
+
+      const [userSnap, scootySnap] = await Promise.all([tx.get(userRef), tx.get(scootyRef)]);
+      if(!userSnap.exists){ throw new Error('User record missing'); }
+      const user = userSnap.data() || {};
+
+      // YANA_CHANGED: Auto-heal: if a scooter has a battery but no rider, clear it.
+      if(scootySnap.exists){
+        const s = scootySnap.data() || {};
+        if(s.currentBatteryId && !s.currentRiderEmail){
+          tx.set(scootyRef, { currentBatteryId:null, status:'free' }, { merge:true });
+        }
+      }
+
+      let scooty;
+      if(!scootySnap.exists){
+        scooty = {
+          scootyId: scooterId,
+          currentBatteryId: null,
+          currentRiderEmail: null,
+          status: 'free'
+        };
+        tx.set(scootyRef, scooty);
+      } else {
+        scooty = scootySnap.data();
+      }
+
+      // === CASE 1: returning scooter ===
+      if(user.linkedScooter === scooterId){
       if(!scooty.currentBatteryId){
         tx.set(logsRef.doc(), {
           ts: firebase.firestore.FieldValue.serverTimestamp(),
@@ -535,163 +626,119 @@ async function handleScooterScan(email, scooterId, rawPayload){
         status:'free'
       }, { merge:true });
       tx.set(logsRef.doc(), {
-        ts:firebase.firestore.FieldValue.serverTimestamp(),
+        ts: firebase.firestore.FieldValue.serverTimestamp(),
         email, action:'return_scooter',
         deviceType:'scooter', deviceId:scooterId, rawPayload
       });
-      summary = 'Returned scooter with battery';
       return;
     }
 
-    // === CASE 2: assigning new scooter ===
-    if(user.linkedScooter && user.linkedScooter !== scooterId){
-      throw new Error("Please return your current scooter first.");
-    }
+      // === CASE 2: assigning scooter ===
+      if(user.linkedScooter){
+        throw new Error("You already have a scooter assigned.");
+      }
+      if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
+        throw new Error("This scooter is already assigned to another rider.");
+      }
 
-    if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
-      throw new Error("This scooter is already assigned to another rider.");
-    }
+      tx.set(userRef, { linkedScooter: scooterId }, { merge:true });
+      tx.set(scootyRef, { currentRiderEmail: email, status:'assigned' }, { merge:true });
 
-    // Write both sides
-    tx.set(userRef, { linkedScooter:scooterId }, { merge:true });
-    tx.set(scootyRef, {
-      scootyId: scooterId,
-      currentRiderEmail: email,
-      currentBatteryId: scooty.currentBatteryId || null,
-      status: 'assigned'
-    }, { merge:true });
-    tx.set(logsRef.doc(), {
-      ts:firebase.firestore.FieldValue.serverTimestamp(),
-      email, action:'assign_scooter',
-      deviceType:'scooter', deviceId:scooterId, rawPayload
-    });
-    summary = 'Assigned scooter';
-  });
-
-  return summary;
-}
-
-
-    // YANA_CHANGED: Strong invariants — enforce exclusivity and full schema update
-async function handleBatteryScan(email, batteryId, rawPayload){
-  const userRef = db.collection('users').doc(email);
-  const batteryRef = db.collection('batteries').doc(batteryId);
-  const logsRef = db.collection('logs');
-
-  let summary = '';
-
-  await db.runTransaction(async (tx)=>{
-    // === READ all relevant docs ===
-    const userSnap = await tx.get(userRef);
-    if(!userSnap.exists) throw new Error('User doc missing');
-    const user = userSnap.data();
-
-    const batterySnap = await tx.get(batteryRef);
-    let battery;
-    if(!batterySnap.exists){
-      battery = {
-        batteryId, assignedScootyId:null,
-        assignedRiderEmail:null, status:'free'
-      };
-      tx.set(batteryRef, battery);
-    } else {
-      battery = batterySnap.data();
-    }
-
-    if(!user.linkedScooter){
-      throw new Error("You must have a scooter before taking a battery.");
-    }
-    const scootyRef = db.collection('scooters').doc(user.linkedScooter);
-    const scootySnap = await tx.get(scootyRef);
-    if(!scootySnap.exists) throw new Error("Linked scooter not found.");
-    const scooty = scootySnap.data();
-
-    // === CASE 1: returning battery ===
-    if(user.linkedBattery === batteryId){
-      tx.set(userRef, { linkedBattery:null }, { merge:true });
-      tx.set(batteryRef, {
-        batteryId, assignedScootyId:null,
-        assignedRiderEmail:null, status:'free'
-      }, { merge:true });
-      tx.set(scootyRef, { currentBatteryId:null, status:'assigned' }, { merge:true });
       tx.set(logsRef.doc(), {
-        ts:firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'return_battery',
-        deviceType:'battery', deviceId:batteryId, rawPayload
+        ts: firebase.firestore.FieldValue.serverTimestamp(),
+        email, action:'assign_scooter',
+        deviceType:'scooter', deviceId:scooterId, rawPayload
       });
-      summary = 'Returned battery';
-      return;
-    }
-
-    // === CASE 2: assigning new battery ===
-    if(user.linkedBattery && user.linkedBattery !== batteryId){
-      throw new Error("Please return your current battery first.");
-    }
-    if(battery.assignedRiderEmail && battery.assignedRiderEmail !== email){
-      throw new Error("This battery is already assigned to another rider.");
-    }
-    if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
-      throw new Error("This battery is already assigned to another scooter.");
-    }
-    if(scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
-      throw new Error("This scooter already has a different battery.");
-    }
-
-    // Write all 3 sides
-    tx.set(userRef, { linkedBattery:batteryId }, { merge:true });
-    tx.set(batteryRef, {
-      batteryId, assignedScootyId:user.linkedScooter,
-      assignedRiderEmail:email, status:'assigned'
-    }, { merge:true });
-    tx.set(scootyRef, { currentBatteryId:batteryId, status:'assigned' }, { merge:true });
-    tx.set(logsRef.doc(), {
-      ts:firebase.firestore.FieldValue.serverTimestamp(),
-      email, action:'assign_battery',
-      deviceType:'battery', deviceId:batteryId, rawPayload
     });
-    summary = 'Assigned battery';
-  });
 
-  return summary;
-}
-
+    await loadUserDevices();
+    await loadLogs();
+  }
 
   /**************************************************************************
-   * ========================= UI: load user & logs =========================
+   * ========================= BATTERY ASSIGN/RETURN =======================
    **************************************************************************/
-  async function loadUserDevices(){
-    const user = auth.currentUser;
-    if(!user) return;
-    const uDoc = await db.collection('users').doc(user.email).get();
-    const data = uDoc.exists ? uDoc.data() : null;
-    linkedScooter.textContent = data && data.linkedScooter ? data.linkedScooter : '—';
-    linkedBattery.textContent = data && data.linkedBattery ? data.linkedBattery : '—';
+  async function assignOrReturnBattery(batteryId, rawPayload){
+    if(!batteryId) throw new Error('Invalid battery id');
+    const u = auth.currentUser;
+    if(!u) throw new Error('Not signed in');
+
+    await db.runTransaction(async (tx)=>{
+      const email = u.email;
+      const userRef = userDocRef(email);
+      const userSnap = await tx.get(userRef);
+      if(!userSnap.exists) throw new Error('User missing');
+      const user = userSnap.data() || {};
+
+      if(!user.linkedScooter){
+        throw new Error("Assign a scooter first.");
+      }
+
+      const batteryRef = batteryDocRef(batteryId);
+      const scootyRef = scootyDocRef(user.linkedScooter);
+
+      const [batterySnap, scootySnap] = await Promise.all([tx.get(batteryRef), tx.get(scootyRef)]);
+      let battery = batterySnap.exists ? (batterySnap.data()||{}) : {
+        batteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free'
+      };
+      let scooty = scootySnap.exists ? (scootySnap.data()||{}) : { scootyId:user.linkedScooter, currentBatteryId:null, currentRiderEmail:email, status:'assigned' };
+
+      // === CASE 1: returning only battery ===
+      if(user.linkedBattery === batteryId){
+        if(scooty.currentBatteryId !== batteryId){
+          throw new Error("Invalid state: rider battery doesn't match scooter battery");
+        }
+        tx.set(userRef, { linkedBattery:null }, { merge:true });
+        tx.set(scootyRef, { currentBatteryId:null, status:'assigned' }, { merge:true });
+        tx.set(batteryRef, { assignedScootyId:null, assignedRiderEmail:null, status:'free' }, { merge:true });
+        tx.set(logsRef.doc(), {
+          ts:firebase.firestore.FieldValue.serverTimestamp(),
+          email, action:'return_battery',
+          deviceType:'battery', deviceId:batteryId, rawPayload
+        });
+        return;
+      }
+
+      // === CASE 2: assigning new battery ===
+      if(user.linkedBattery && user.linkedBattery !== batteryId){
+        throw new Error("Please return your current battery first.");
+      }
+      if(battery.assignedRiderEmail && battery.assignedRiderEmail !== email){
+        throw new Error("This battery is already assigned to another rider.");
+      }
+      if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
+        throw new Error("This battery is already assigned to another scooter.");
+      }
+      if(scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
+        throw new Error("This scooter already has a different battery.");
+      }
+
+      // Write all 3 sides
+      tx.set(userRef, { linkedBattery:batteryId }, { merge:true });
+      tx.set(batteryRef, {
+        batteryId, assignedScootyId:user.linkedScooter,
+        assignedRiderEmail:email, status:'assigned'
+      }, { merge:true });
+      tx.set(scootyRef, { currentBatteryId:batteryId, status:'assigned' }, { merge:true });
+      tx.set(logsRef.doc(), {
+        ts:firebase.firestore.FieldValue.serverTimestamp(),
+        email, action:'assign_battery',
+        deviceType:'battery', deviceId:batteryId, rawPayload
+      });
+    });
+
+    await loadUserDevices();
+    await loadLogs();
   }
 
-  async function loadLogs(){
-    logList.innerHTML = `<div class="muted">Loading logs...</div>`;
-    const q = db.collection('logs').orderBy('ts','desc').limit(50);
-    const snap = await q.get();
-    logList.innerHTML = '';
-    if(snap.empty){
-      logList.innerHTML = '<div class="muted">No logs yet</div>';
-      return;
-    }
-    snap.forEach(doc=>{
-      const d = doc.data();
-      const when = d.ts ? new Date(d.ts.toDate()).toLocaleString() : '—';
-      const el = document.createElement('div');
-      el.className = 'log-item';
-      el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${d.action ? d.action.toUpperCase() : 'LOG'}</strong> &nbsp; ${d.deviceType || ''} <span style="opacity:.9">(${d.deviceId || ''})</span></div>
-        <div class="muted" style="font-size:12px">${when}</div>
-      </div>
-      <div class="muted" style="margin-top:6px">user: ${d.email || '—'} • payload: <code>${escapeHtml(d.rawPayload || '')}</code>${d.note ? ' • note: '+escapeHtml(d.note) : ''}</div>`;
-      logList.appendChild(el);
-    });
-  }
+  /**************************************************************************
+   * ========================= LOG VIEW REFRESH ============================
+   **************************************************************************/
   refreshLogs.addEventListener('click', loadLogs);
 
+  /**************************************************************************
+   * ========================= MISC ========================================
+   **************************************************************************/
   function escapeHtml(s){ return (s+'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
