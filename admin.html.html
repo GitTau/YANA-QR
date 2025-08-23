@@ -72,7 +72,7 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
 
-  const ADMIN_EMAIL = "vivek.rout99@gmail.com"; // YANA_ADMIN_PAGE: change here if needed
+  const ADMIN_EMAIL = "vivek.rout99@gmail.com"; // YANA_ADMIN_PAGE
 
   const adminEmailEl = document.getElementById('adminEmail');
   const signoutBtn = document.getElementById('signoutBtn');
@@ -80,12 +80,16 @@
   const usersBody = document.getElementById('usersBody');
   const notAdmin = document.getElementById('notAdmin');
 
+  // YANA_ADMIN_PAGE: normalize doc ids to lowercase emails
+  function normEmail(email){ return (email||'').trim().toLowerCase(); }
+
   // YANA_ADMIN_PAGE: Google login prompt if not already logged in
   auth.onAuthStateChanged(async (user)=>{
     if(user){
-      adminEmailEl.textContent = user.email;
+      const emailLc = normEmail(user.email);
+      adminEmailEl.textContent = emailLc;
       signoutBtn.style.display = 'inline-block';
-      if(user.email === ADMIN_EMAIL){
+      if(emailLc === normEmail(ADMIN_EMAIL)){
         notAdmin.style.display = 'none';
         usersTable.style.display = '';
         loadUsers();
@@ -105,10 +109,11 @@
 
   signoutBtn.addEventListener('click', ()=>auth.signOut());
 
-  // YANA_ADMIN_PAGE: Load all users for approval
+  // YANA_ADMIN_PAGE: Load all users (avoid createdAt dependency)
   async function loadUsers(){
     usersBody.innerHTML = "";
-    const snap = await db.collection('users').orderBy("createdAt","desc").get();
+    // YANA_ADMIN_PAGE: No orderBy('createdAt') to avoid missing field/index issues
+    const snap = await db.collection('users').orderBy('email').get();
     snap.forEach(doc=>{
       const u = doc.data();
       const tr = document.createElement('tr');
@@ -132,10 +137,11 @@
     });
   }
 
-  // YANA_ADMIN_PAGE: Update status
+  // YANA_ADMIN_PAGE: Update status with normalized doc id
   async function updateStatus(email, status){
-    if(!email) return;
-    await db.collection('users').doc(email).set({status}, {merge:true});
+    const id = normEmail(email);
+    if(!id) return;
+    await db.collection('users').doc(id).set({status}, {merge:true});
     loadUsers();
   }
   </script>
