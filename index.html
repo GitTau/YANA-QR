@@ -547,7 +547,7 @@
       }
 
       // Assign rider ↔ scooter
-      tx.update(userRef, { linkedScooter:scooterId });
+      safeUpdateOrCreate(userRef, { linkedScooter:scooterId });
       tx.set(scootyRef, { currentRiderEmail:email, /* battery stays as-is or null */ status:'assigned' }, { merge:true });
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
       summary += (summary?'; ':'') + 'Assigned scooter';
@@ -648,9 +648,9 @@
       }
 
       // Assign battery ↔ rider ↔ scooter
-      tx.update(userRef, { linkedBattery:batteryId });
+      safeUpdateOrCreate(tx, userRef, { linkedBattery:batteryId });
       tx.set(batteryRef, { assignedScootyId:user.linkedScooter, assignedRiderEmail:email, status:'assigned' }, { merge:true });
-      if(scootyRef){ tx.update(scootyRef, { currentBatteryId:batteryId, status:'assigned' }); }
+      if(scootyRef){ safeUpdateOrCreate(tx, scootyRef, { currentBatteryId:batteryId }); }
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
       summary += (summary?'; ':'') + 'Assigned battery';
     });
