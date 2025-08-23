@@ -501,15 +501,22 @@
       }
 
       if(user.linkedScooter === scooterId){
-        if(!scooty.currentBatteryId){
-          tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action:'error_missing_battery_on_return', deviceType:'scooter', deviceId:scooterId, rawPayload });
-          throw new Error("Scooter return requires a battery linked.");
-        }
-        tx.set(userRef, { linkedScooter:null, linkedBattery:null }, { merge:true });
-        tx.set(scootyRef, { scootyId:scooterId, currentRiderEmail:null, currentBatteryId:null, status:'free' }, { merge:true });
+        // ✅ Remove battery requirement and unlink only the scooter
+      tx.set(userRef, { linkedScooter: null }, { merge: true });
+      tx.set(scootyRef, { scootyId: scooterId, currentRiderEmail: null, currentBatteryId: null, status: 'free' }, { merge: true });
+
+      // If a battery was mounted on the scooter, detach it from the scooter
+      // but keep it assigned to the rider (battery remains "assigned").
+      if (scooty.currentBatteryId) {
         const batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
-        tx.set(batteryRef, { batteryId:scooty.currentBatteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free' }, { merge:true });
-        tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action:'return_scooter', deviceType:'scooter', deviceId:scooterId, rawPayload });
+        tx.set(batteryRef, {
+          batteryId: scooty.currentBatteryId,
+          assignedScootyId: null,
+          // keep assignedRiderEmail as-is so battery remains linked to rider
+          status: 'assigned'
+        }, { merge: true });
+        }
+        tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action: 'return_scooter', deviceType: 'scooter', deviceId: scooterId, rawPayload });
         return;
       }
 
