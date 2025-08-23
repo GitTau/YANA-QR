@@ -61,19 +61,11 @@
     .controls{display:flex;gap:8px;flex-wrap:wrap}
     .status{padding:8px;border-radius:10px;background:var(--glass);color:var(--muted);font-size:13px}
 
-    /* YANA_RULE: Removed accidental HTML tags that were inside <style>.
-       Those tags broke CSS parsing and could impact layout/rendering. */
-    /* (No other changes in CSS) */
-
     /* device info & logs */
     .info-row{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:8px}
     .log-list{max-height:380px;overflow:auto;margin-top:8px;padding-right:8px}
     .log-item{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;font-size:13px}
     .muted{color:var(--muted);font-size:13px}
-
-    /* input & file */
-    .file-input{display:flex;gap:8px;align-items:center}
-    .logo-preview{width:56px;height:56px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden}
 
     /* YANA_ADMIN_CHANGE: registration form styles */
     #registrationUI .form-input{
@@ -81,6 +73,17 @@
       background:rgba(255,255,255,0.04);color:#fff;outline:none;
     }
     #registrationUI label{display:block;margin-bottom:6px}
+
+    /* YANA_CHANGED: submit button glow to signal ready-to-submit after scan */
+    .glow {
+      box-shadow: 0 0 0 0 rgba(0,234,255, 0.9);
+      animation: glowPulse 1.5s infinite;
+    }
+    @keyframes glowPulse {
+      0% { box-shadow: 0 0 0 0 rgba(0,234,255, 0.9); }
+      70% { box-shadow: 0 0 18px 8px rgba(0,234,255, 0.15); }
+      100% { box-shadow: 0 0 0 0 rgba(0,234,255, 0.0); }
+    }
   </style>
 </head>
 <body>
@@ -129,8 +132,8 @@
         </div>
       </div>
 
-    <!-- YANA_ADMIN_CHANGE: Added appMain wrapper for gating scanner UI by approval status -->
-      <div id="appMain" class="grid">
+    <!-- YANA_ADMIN_CHANGE: appMain is hidden until approved -->
+      <div id="appMain" class="grid" style="display:none;">
       <!-- LEFT: Scanner + controls -->
       <div class="card scanner">
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -160,7 +163,7 @@
 
         <!-- submit -->
         <div style="display:flex;gap:8px;align-items:center">
-          <button id="submitScan" class="btn">Submit</button>
+          <button id="submitScan" class="btn" disabled>Submit</button> <!-- YANA_CHANGED: start disabled -->
           <div class="muted">Submits the detected scooter/battery based on the mode</div>
         </div>
 
@@ -251,6 +254,9 @@
   const logList = document.getElementById('logList');
   const refreshLogs = document.getElementById('refreshLogs');
 
+  // YANA_ADMIN_CHANGE: keep a realtime listener for approval changes
+  let userDocUnsub = null;
+
   /**************************************************************************
    * ========================= AUTHENTICATION ===============================
    **************************************************************************/
@@ -268,88 +274,30 @@
     }
   });
 
-  signoutBtn.addEventListener('click', async ()=>{ await auth.signOut(); });
+  signoutBtn.addEventListener('click', async ()=>{
+    if(userDocUnsub){ userDocUnsub(); userDocUnsub = null; } // YANA_ADMIN_CHANGE: cleanup realtime listener
+    await auth.signOut();
+  });
+
+  // YANA_ADMIN_CHANGE: doc id normalization helper
+  function normEmail(email){ return (email||'').trim().toLowerCase(); }
 
   auth.onAuthStateChanged(async (user)=>{
     if(user){
-      userEmailEl.textContent = user.email;
-      riderInfo.textContent = `${user.displayName || 'Rider'} (${user.email})`;
+      const emailLc = normEmail(user.email);
+      userEmailEl.textContent = emailLc;
+      riderInfo.textContent = `${user.displayName || 'Rider'} (${emailLc})`;
       signinBtn.style.display = 'none';
       signoutBtn.style.display = 'inline-block';
 
       // YANA_ADMIN_CHANGE: ensure user doc exists with registration fields and status gating
-      const uDocRef = db.collection('users').doc(user.email);
+      const uDocRef = db.collection('users').doc(emailLc);
 
-  // YANA_ADMIN_CHANGE: Show correct UI based on user status and load data accordingly
-  async function checkUserStatus(email, displayName) {
-    try{
-      const userRef = db.collection('users').doc(email);
-      const snap = await userRef.get();
-      if(!snap.exists){ 
-        // Should not happen, but keep scanner hidden just in case
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = 'none';
-        return;
-      }
-      const data = snap.data() || {};
-      if(data.status === 'approved'){
-        // Show main app, hide registration
-        document.getElementById('appMain').style.display = '';
-        document.getElementById('registrationUI').style.display = 'none';
-        // load rider & logs views
-        loadUserDevices();
-        loadLogs();
-      } else if(data.status === 'pending' || !data.status){
-        // Hide app, show registration
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = '';
-        document.getElementById('regName').textContent = displayName || '';
-        document.getElementById('regEmail').textContent = email || '';
-        document.getElementById('regStatus').textContent = 'Pending';
-      } else if(data.status === 'rejected'){
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = 'none';
-        alert('Your registration has been rejected. Please contact support.');
-      } else {
-        // unknown state -> default to pending UI
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = '';
-      }
-    }catch(e){
-      console.error('Status check error', e);
-    }
-  }
-
-  // YANA_ADMIN_CHANGE: Registration submit handler (saves phone & aadhar, remains pending for admin approval)
-  (function attachRegistrationHandler(){
-    const btn = document.getElementById('submitRegistration');
-    if(!btn) return;
-    btn.addEventListener('click', async ()=>{
-      try{
-        const u = auth.currentUser;
-        if(!u){ alert('Please sign in first'); return; }
-        const phone = (document.getElementById('regPhone').value||'').trim();
-        const aadhar = (document.getElementById('regAadhar').value||'').trim();
-        if(!phone || !aadhar){
-          alert('Please enter phone and aadhar.');
-          return;
-        }
-        await db.collection('users').doc(u.email).set({
-          phone, aadhar, status:'pending'
-        }, { merge:true });
-        document.getElementById('regStatus').textContent = 'Pending (submitted)';
-        alert('Registration submitted. Wait for admin approval.');
-      }catch(err){
-        console.error('Registration submit error', err);
-        alert('Failed to submit registration.');
-      }
-    });
-  })();
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(uDocRef);
         if (!snap.exists) {
           tx.set(uDocRef, {
-            email: user.email,
+            email: emailLc,
             name: user.displayName || "",
             phone: null,
             aadhar: null,
@@ -360,8 +308,30 @@
           });
         }
       });
-      // YANA_ADMIN_CHANGE: Decide which UI to show
-      checkUserStatus(user.email, user.displayName);
+
+      // YANA_ADMIN_CHANGE: listen realtime to status (so admin approval reflects instantly)
+      if(userDocUnsub){ userDocUnsub(); userDocUnsub = null; }
+      userDocUnsub = uDocRef.onSnapshot((snap)=>{
+        if(!snap.exists){ return; }
+        const data = snap.data() || {};
+        if(data.status === 'approved'){
+          document.getElementById('appMain').style.display = '';
+          document.getElementById('registrationUI').style.display = 'none';
+          loadUserDevices();
+          loadLogs();
+        } else if(data.status === 'pending' || !data.status){
+          document.getElementById('appMain').style.display = 'none';
+          document.getElementById('registrationUI').style.display = '';
+          document.getElementById('regName').textContent = user.displayName || '';
+          document.getElementById('regEmail').textContent = emailLc || '';
+          document.getElementById('regStatus').textContent = 'Pending';
+        } else if(data.status === 'rejected'){
+          document.getElementById('appMain').style.display = 'none';
+          document.getElementById('registrationUI').style.display = 'none';
+          alert('Your registration has been rejected. Please contact support.');
+        }
+      });
+
     } else {
       userEmailEl.textContent = 'Not signed in';
       riderInfo.textContent = '—';
@@ -375,15 +345,43 @@
       const regEl = document.getElementById('registrationUI');
       if(appMainEl) appMainEl.style.display = 'none';
       if(regEl) regEl.style.display = 'none';
+      if(userDocUnsub){ userDocUnsub(); userDocUnsub = null; } // cleanup
     }
   });
+
+  // YANA_ADMIN_CHANGE: Registration submit handler
+  (function attachRegistrationHandler(){
+    const btn = document.getElementById('submitRegistration');
+    if(!btn) return;
+    btn.addEventListener('click', async ()=>{
+      try{
+        const u = auth.currentUser;
+        if(!u){ alert('Please sign in first'); return; }
+        const emailLc = normEmail(u.email);
+        const phone = (document.getElementById('regPhone').value||'').trim();
+        const aadhar = (document.getElementById('regAadhar').value||'').trim();
+        if(!phone || !aadhar){
+          alert('Please enter phone and aadhar.');
+          return;
+        }
+        await db.collection('users').doc(emailLc).set({
+          phone, aadhar, status:'pending'
+        }, { merge:true });
+        document.getElementById('regStatus').textContent = 'Pending (submitted)';
+        alert('Registration submitted. Wait for admin approval.');
+      }catch(err){
+        console.error('Registration submit error', err);
+        alert('Failed to submit registration.');
+      }
+    });
+  })();
 
   /**************************************************************************
    * ========================= CAMERA & QR SCANNER ==========================
    **************************************************************************/
   let stream = null;
   let scanning = false;
-  let scanInterval = null;
+  let rafId = null; // YANA_CHANGED: use rAF instead of setInterval for smoother loop
   let lastRawResult = null;
   let lastParsedResult = { type: 'unknown', id: '', raw: '' };
 
@@ -400,6 +398,8 @@
       startCamBtn.style.display = 'none';
       stopCamBtn.style.display = 'inline-block';
       scanning = true;
+      submitScanBtn.disabled = true;            // YANA_CHANGED: keep disabled until a good decode
+      submitScanBtn.classList.remove('glow');   // YANA_CHANGED: remove glow on new session
       scanLoop();
     }catch(err){
       console.error('Camera error', err);
@@ -413,7 +413,7 @@
     startCamBtn.style.display = 'inline-block';
     stopCamBtn.style.display = 'none';
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
-    if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
+    if(rafId){ cancelAnimationFrame(rafId); rafId = null; } // YANA_CHANGED
   }
   startCamBtn.addEventListener('click', startCamera);
   stopCamBtn.addEventListener('click', stopCamera);
@@ -421,29 +421,51 @@
   function scanLoop(){
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d',{ willReadFrequently:true });
-    scanInterval = setInterval(async ()=>{
-      if(!scanning || !video.videoWidth) return;
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+    const loop = ()=>{
+      if(!scanning || !video.videoWidth){ rafId = requestAnimationFrame(loop); return; }
+
+      // YANA_CHANGED: downscale to speed up jsQR (max 640px width)
+      const scale = Math.min(640 / video.videoWidth, 1);
+      const w = Math.max(320, Math.floor(video.videoWidth * scale));
+      const h = Math.max(240, Math.floor(video.videoHeight * scale));
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(video,0,0,w,h);
+      const imageData = ctx.getImageData(0,0,w,h);
+      const code = jsQR(imageData.data, w, h);
+
       if(code && code.data && code.data !== lastRawResult){
         lastRawResult = code.data;
         lastDecoded.textContent = code.data;
-        const parsed = await parsePayload(code.data);
-        lastParsedResult = parsed;
-        lastDeviceInfo.textContent = `${parsed.type} → ${parsed.id || '—'}`;
+        parsePayload(code.data).then(parsed=>{
+          lastParsedResult = parsed;
+          lastDeviceInfo.textContent = `${parsed.type} → ${parsed.id || '—'}`;
+
+          if(parsed.type === 'scooter' || parsed.type === 'battery'){
+            // YANA_CHANGED: auto-stop camera & enable submit
+            scanning = false;
+            stopCamera();
+            // auto-select mode if auto
+            if(scanMode.value === 'auto'){ scanMode.value = parsed.type; } // auto-set
+            submitScanBtn.disabled = false;
+            submitScanBtn.classList.add('glow');
+          }
+        });
       }
-    }, 400);
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
   }
 
   /**************************************************************************
    * ========================= QR PARSE ====================================
    **************************************************************************/
   async function parsePayload(raw){
-    // Accept 'scooter:ID' or 'battery:ID' and new YEVxxx / YBTxxx
     const rawTrim = (raw||'').trim();
     if(!rawTrim){ return { type:'unknown', id:'', raw:rawTrim }; }
+
+    // YANA_CHANGED: compute sanitizedId upfront to avoid referencing undefined later
+    const sanitizedId = rawTrim.toUpperCase().replace(/[^A-Z0-9:_-]/g, '');
 
     // YANA_RULE: Accept both new and legacy formats robustly
     // 1) direct patterns like "YEV001" / "YBT001"
@@ -464,7 +486,7 @@
 
     // 3) Heuristics for plain ids
     try{
-      const id = rawTrim.toUpperCase().replace(/[^A-Z0-9:_-]/g, '');
+      const id = sanitizedId; // YANA_CHANGED
       if(/^YEV\d+/i.test(id) || /^SCOOT/i.test(id) || /^SCOOTER/i.test(id)) {
         return { type: 'scooter', id, raw: rawTrim };
       }
@@ -475,26 +497,27 @@
       console.warn('Heuristic check failed', e);
     }
 
+    // Lookup in devices (best effort)
     try {
-      const scooterRef = db.collection('devices').doc(`scooter_${id}`);
-      const batteryRef = db.collection('devices').doc(`battery_${id}`);
+      const scooterRef = db.collection('devices').doc(`scooter_${sanitizedId}`); // YANA_CHANGED
+      const batteryRef = db.collection('devices').doc(`battery_${sanitizedId}`); // YANA_CHANGED
       const [sSnap, bSnap] = await Promise.all([scooterRef.get(), batteryRef.get()]);
-      if(sSnap.exists){ return { type: 'scooter', id, raw: rawTrim, source: 'devices_collection' }; }
-      if(bSnap.exists){ return { type: 'battery', id, raw: rawTrim, source: 'devices_collection' }; }
+      if(sSnap.exists){ return { type: 'scooter', id:sanitizedId, raw: rawTrim, source: 'devices_collection' }; }
+      if(bSnap.exists){ return { type: 'battery', id:sanitizedId, raw: rawTrim, source: 'devices_collection' }; }
 
       // YANA_CHANGED: log unknown QR once per ID (throttled) so we can trace bad stickers/prints.
-      if(lastUnknownIdLogged !== id){
-        lastUnknownIdLogged = id;
+      if(lastUnknownIdLogged !== sanitizedId){
+        lastUnknownIdLogged = sanitizedId;
         const u = auth.currentUser;
         logOutOfBand({
-          email: u ? u.email : null,
+          email: u ? normEmail(u.email) : null, // YANA_CHANGED: lowercased email
           action: 'unknown_qr',
           deviceType: 'unknown',
-          deviceId: id,
+          deviceId: sanitizedId,
           rawPayload: rawTrim
         });
-        console.warn('Unknown device id scanned:', id);
-        permissionStatus.textContent = `Unknown QR: ${id}`;
+        console.warn('Unknown device id scanned:', sanitizedId);
+        permissionStatus.textContent = `Unknown QR: ${sanitizedId}`;
       }
     } catch(e){
       console.warn('devices lookup failed', e);
@@ -507,16 +530,20 @@
    * ========================= SUBMIT LOGIC ================================
    **************************************************************************/
   submitScanBtn.addEventListener('click', async ()=>{
-    const mode = scanMode.value;
-    if(lastParsedResult.type === 'unknown' || !lastParsedResult.id){
-      alert('No valid scooter/battery detected yet.');
-      return;
-    }
-    if(mode !== 'auto' && mode !== lastParsedResult.type){
-      alert(`Scan mode is "${mode}" but QR parsed as "${lastParsedResult.type}". Please fix mode or rescan.`);
-      return;
-    }
+    if(submitScanBtn.disabled) return;           // YANA_CHANGED: guard double click
+    submitScanBtn.disabled = true;               // YANA_CHANGED: block re-entry
+    submitScanBtn.classList.remove('glow');      // YANA_CHANGED
     try{
+      const mode = scanMode.value;
+      if(lastParsedResult.type === 'unknown' || !lastParsedResult.id){
+        alert('No valid scooter/battery detected yet.');
+        return;
+      }
+      if(mode !== 'auto' && mode !== lastParsedResult.type){
+        alert(`Scan mode is "${mode}" but QR parsed as "${lastParsedResult.type}". Please fix mode or rescan.`);
+        return;
+      }
+
       if(lastParsedResult.type === 'scooter'){
         await assignOrReturnScooter(lastParsedResult.id, lastParsedResult.raw);
       } else if(lastParsedResult.type === 'battery'){
@@ -525,15 +552,17 @@
     }catch(err){
       console.error(err);
       alert(err.message || 'Submit failed.');
+    } finally {
+      submitScanBtn.disabled = false; // YANA_CHANGED
     }
   });
 
   /**************************************************************************
    * ========================= TRANSACTION HELPERS ==========================
    **************************************************************************/
-  function userDocRef(email){ return db.collection('users').doc(email); }
-  function scootyDocRef(scooterId){ return db.collection('scooties').doc(scooterId); }
-  function batteryDocRef(batteryId){ return db.collection('batteries').doc(batteryId); }
+  function userDocRef(email){ return db.collection('users').doc(normEmail(email)); } // YANA_CHANGED: normalize keys
+  function scootyDocRef(scooterId){ return db.collection('scooties').doc(scooterId.toUpperCase()); } // YANA_CHANGED: normalized keys
+  function batteryDocRef(batteryId){ return db.collection('batteries').doc(batteryId.toUpperCase()); } // YANA_CHANGED
   const logsRef = db.collection('logs');
 
   async function logOutOfBand(d){
@@ -546,9 +575,9 @@
     if(!u) return;
     const snap = await userDocRef(u.email).get();
     const data = snap.exists ? snap.data() : {};
-    riderInfo.textContent = `${u.displayName || 'Rider'} (${u.email})`;
-    linkedScooter.textContent = data.linkedScooter || '—';
-    linkedBattery.textContent = data.linkedBattery || '—';
+    riderInfo.textContent = `${u.displayName || 'Rider'} (${normEmail(u.email)})`; // YANA_CHANGED
+    linkedScooter.textContent = (data.linkedScooter || '—');
+    linkedBattery.textContent = (data.linkedBattery || '—');
   }
 
   async function loadLogs(){
@@ -569,20 +598,23 @@
    * ========================= SCOOTER ASSIGN/RETURN =======================
    **************************************************************************/
   async function assignOrReturnScooter(scooterId, rawPayload){
+    // YANA_CHANGED: normalize id once
+    scooterId = (scooterId||'').toUpperCase();
     if(!scooterId) throw new Error('Invalid scooter id');
     const u = auth.currentUser;
     if(!u) throw new Error('Not signed in');
 
     await db.runTransaction(async (tx)=>{
-      const email = u.email;
+      const email = normEmail(u.email); // YANA_CHANGED
       const userRef = userDocRef(email);
       const scootyRef = scootyDocRef(scooterId);
 
-      const [userSnap, scootySnap] = await Promise.all([tx.get(userRef), tx.get(scootyRef)]);
+      const userSnap = await tx.get(userRef);
+      const scootySnap = await tx.get(scootyRef);
       if(!userSnap.exists){ throw new Error('User record missing'); }
       const user = userSnap.data() || {};
 
-      // YANA_CHANGED: Auto-heal: if a scooter has a battery but no rider, clear it.
+      // YANA_CHANGED: Auto-heal invalid state: scooter has battery but no rider ⇒ clear battery link
       if(scootySnap.exists){
         const s = scootySnap.data() || {};
         if(s.currentBatteryId && !s.currentRiderEmail){
@@ -604,40 +636,40 @@
       }
 
       // === CASE 1: returning scooter ===
-      if(user.linkedScooter === scooterId){
-      if(!scooty.currentBatteryId){
+      if((user.linkedScooter||'').toUpperCase() === scooterId){ // YANA_CHANGED: case-safe compare
+        if(!scooty.currentBatteryId){
+          tx.set(logsRef.doc(), {
+            ts: firebase.firestore.FieldValue.serverTimestamp(),
+            email, action:'error_missing_battery_on_return',
+            deviceType:'scooter', deviceId:scooterId, rawPayload
+          });
+          throw new Error("Scooter return requires a battery linked.");
+        }
+        // Clear user, scooter, battery
+        tx.set(userRef, { linkedScooter:null, linkedBattery:null }, { merge:true });
+        tx.set(scootyRef, {
+          scootyId:scooterId, currentRiderEmail:null,
+          currentBatteryId:null, status:'free'
+        }, { merge:true });
+        const batteryRef = db.collection('batteries').doc(String(scooty.currentBatteryId).toUpperCase()); // YANA_CHANGED
+        tx.set(batteryRef, {
+          batteryId:String(scooty.currentBatteryId).toUpperCase(),
+          assignedScootyId:null, assignedRiderEmail:null,
+          status:'free'
+        }, { merge:true });
         tx.set(logsRef.doc(), {
           ts: firebase.firestore.FieldValue.serverTimestamp(),
-          email, action:'error_missing_battery_on_return',
+          email, action:'return_scooter',
           deviceType:'scooter', deviceId:scooterId, rawPayload
         });
-        throw new Error("Scooter return requires a battery linked.");
+        return;
       }
-      // Clear user, scooter, battery
-      tx.set(userRef, { linkedScooter:null, linkedBattery:null }, { merge:true });
-      tx.set(scootyRef, {
-        scootyId:scooterId, currentRiderEmail:null,
-        currentBatteryId:null, status:'free'
-      }, { merge:true });
-      const batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
-      tx.set(batteryRef, {
-        batteryId:scooty.currentBatteryId,
-        assignedScootyId:null, assignedRiderEmail:null,
-        status:'free'
-      }, { merge:true });
-      tx.set(logsRef.doc(), {
-        ts: firebase.firestore.FieldValue.serverTimestamp(),
-        email, action:'return_scooter',
-        deviceType:'scooter', deviceId:scooterId, rawPayload
-      });
-      return;
-    }
 
       // === CASE 2: assigning scooter ===
       if(user.linkedScooter){
         throw new Error("You already have a scooter assigned.");
       }
-      if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
+      if(scooty.currentRiderEmail && normEmail(scooty.currentRiderEmail) !== email){
         throw new Error("This scooter is already assigned to another rider.");
       }
 
@@ -659,12 +691,14 @@
    * ========================= BATTERY ASSIGN/RETURN =======================
    **************************************************************************/
   async function assignOrReturnBattery(batteryId, rawPayload){
+    // YANA_CHANGED: normalize id once
+    batteryId = (batteryId||'').toUpperCase();
     if(!batteryId) throw new Error('Invalid battery id');
     const u = auth.currentUser;
     if(!u) throw new Error('Not signed in');
 
     await db.runTransaction(async (tx)=>{
-      const email = u.email;
+      const email = normEmail(u.email); // YANA_CHANGED
       const userRef = userDocRef(email);
       const userSnap = await tx.get(userRef);
       if(!userSnap.exists) throw new Error('User missing');
@@ -675,17 +709,22 @@
       }
 
       const batteryRef = batteryDocRef(batteryId);
-      const scootyRef = scootyDocRef(user.linkedScooter);
+      const scootyRef = scootyDocRef(String(user.linkedScooter).toUpperCase()); // YANA_CHANGED
 
-      const [batterySnap, scootySnap] = await Promise.all([tx.get(batteryRef), tx.get(scootyRef)]);
+      const batterySnap = await tx.get(batteryRef);
+      const scootySnap  = await tx.get(scootyRef);
+
       let battery = batterySnap.exists ? (batterySnap.data()||{}) : {
         batteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free'
       };
-      let scooty = scootySnap.exists ? (scootySnap.data()||{}) : { scootyId:user.linkedScooter, currentBatteryId:null, currentRiderEmail:email, status:'assigned' };
+      let scooty = scootySnap.exists ? (scootySnap.data()||{}) : {
+        scootyId:String(user.linkedScooter).toUpperCase(),
+        currentBatteryId:null, currentRiderEmail:email, status:'assigned'
+      };
 
       // === CASE 1: returning only battery ===
-      if(user.linkedBattery === batteryId){
-        if(scooty.currentBatteryId !== batteryId){
+      if((user.linkedBattery||'').toUpperCase() === batteryId){ // YANA_CHANGED
+        if(String(scooty.currentBatteryId||'').toUpperCase() !== batteryId){
           throw new Error("Invalid state: rider battery doesn't match scooter battery");
         }
         tx.set(userRef, { linkedBattery:null }, { merge:true });
@@ -700,23 +739,23 @@
       }
 
       // === CASE 2: assigning new battery ===
-      if(user.linkedBattery && user.linkedBattery !== batteryId){
+      if(user.linkedBattery && String(user.linkedBattery).toUpperCase() !== batteryId){
         throw new Error("Please return your current battery first.");
       }
-      if(battery.assignedRiderEmail && battery.assignedRiderEmail !== email){
+      if(battery.assignedRiderEmail && normEmail(battery.assignedRiderEmail) !== email){
         throw new Error("This battery is already assigned to another rider.");
       }
-      if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
+      if(battery.assignedScootyId && String(battery.assignedScootyId).toUpperCase() !== String(user.linkedScooter).toUpperCase()){
         throw new Error("This battery is already assigned to another scooter.");
       }
-      if(scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
+      if(scooty.currentBatteryId && String(scooty.currentBatteryId).toUpperCase() !== batteryId){
         throw new Error("This scooter already has a different battery.");
       }
 
       // Write all 3 sides
       tx.set(userRef, { linkedBattery:batteryId }, { merge:true });
       tx.set(batteryRef, {
-        batteryId, assignedScootyId:user.linkedScooter,
+        batteryId, assignedScootyId:String(user.linkedScooter).toUpperCase(),
         assignedRiderEmail:email, status:'assigned'
       }, { merge:true });
       tx.set(scootyRef, { currentBatteryId:batteryId, status:'assigned' }, { merge:true });
