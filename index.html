@@ -548,27 +548,38 @@
       if(!userSnap.exists) throw new Error('User missing');
       const user = userSnap.data() || {};
 
-      if(!user.linkedScooter){
+      const isReturningThisBattery = (user.linkedBattery === batteryId);
+
+      // ✅ If no scooter is linked, allow only "return" of the same battery.
+      // Block new assignments as before.
+      if(!user.linkedScooter && !isReturningThisBattery){
         throw new Error("Assign a scooter first.");
       }
 
       const batteryRef = batteryDocRef(batteryId);
-      const scootyRef = scootyDocRef(user.linkedScooter);
-
-      const [batterySnap, scootySnap] = await Promise.all([tx.get(batteryRef), tx.get(scootyRef)]);
-      let battery = batterySnap.exists ? (batterySnap.data()||{}) : { batteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free' };
-      let scooty = scootySnap.exists ? (scootySnap.data()||{}) : { scootyId:user.linkedScooter, currentBatteryId:null, currentRiderEmail:email, status:'assigned' };
-
-      if(user.linkedBattery === batteryId){
-        if(scooty.currentBatteryId !== batteryId){
-          throw new Error("Invalid state: rider battery doesn't match scooter battery");
-        }
-        tx.set(userRef, { linkedBattery:null }, { merge:true });
-        tx.set(scootyRef, { currentBatteryId:null, status:'assigned' }, { merge:true });
-        tx.set(batteryRef, { assignedScootyId:null, assignedRiderEmail:null, status:'free' }, { merge:true });
-        tx.set(logsRef.doc(), { ts:firebase.firestore.FieldValue.serverTimestamp(), email, action:'return_battery', deviceType:'battery', deviceId:batteryId, rawPayload });
-        return;
+      // If returning the battery, we may not have a scooter anymore.
+      // Only fetch/modify scooter when it exists.
+      let scootyRef = null, scootySnap = null, scooty = null;
+      if(user.linkedScooter){
+        scootyRef = scootyDocRef(user.linkedScooter);
+        scootySnap = await tx.get(scootyRef);
+        scooty = scootySnap.exists ? (scootySnap.data() || {}) : { scootyId: user.linkedScooter };
       }
+
+      const batterySnap = await tx.get(batteryRef);
+      let battery = batterySnap.exists ? (batterySnap.data()||{}) : { batteryId, assignedScootyId:null, assignedRiderEmail:null, status:'free' };
+
+      // ✅ Return branch (works even if scooter was already returned)
+      if(isReturningThisBattery){
+        // If a scooter is still linked, clear its battery slot; otherwise skip.
+        if (scootyRef && scooty) {
+          tx.set(scootyRef, { currentBatteryId: null, status: 'assigned' }, { merge: true });
+        }
+        tx.set(userRef, { linkedBattery: null }, { merge: true });
+        tx.set(batteryRef, { assignedScootyId: null, assignedRiderEmail: null, status: 'free' }, { merge: true });
+        tx.set(logsRef.doc(), { ts: firebase.firestore.FieldValue.serverTimestamp(), email, action: 'return_battery', deviceType: 'battery', deviceId: batteryId, rawPayload });
+        return;
+}
 
       if(user.linkedBattery && user.linkedBattery !== batteryId){
         throw new Error("Please return your current battery first.");
