@@ -291,6 +291,9 @@
   let lastRawResult = null;
   let lastParsedResult = { type: 'unknown', id: '', raw: '' };
 
+  // YANA_CHANGED: Throttle flag to avoid spamming logs for repeated unknown codes during scanning.
+  let lastUnknownIdLogged = null; // only log to Firestore when the unknown ID changes
+
   async function startCamera(){
     try{
       permissionStatus.textContent = 'Requesting camera...';
@@ -354,6 +357,22 @@
   }
 
   /**************************************************************************
+   * ========================= SMALL HELPERS ================================
+   **************************************************************************/
+
+  // YANA_CHANGED: helper to write structured logs to Firestore from non-transaction flows (errors, unknown_qr).
+  async function logOutOfBand(payload){
+    try{
+      await db.collection('logs').add({
+        ts: firebase.firestore.FieldValue.serverTimestamp(),
+        ...payload
+      });
+    }catch(e){
+      console.warn('Failed to write log', e);
+    }
+  }
+
+  /**************************************************************************
    * ========================= PARSING LOGIC ================================
    **************************************************************************/
   async function determineDeviceType(raw) {
@@ -388,7 +407,21 @@
       const [sSnap, bSnap] = await Promise.all([scooterRef.get(), batteryRef.get()]);
       if(sSnap.exists){ return { type: 'scooter', id, raw: rawTrim, source: 'devices_collection' }; }
       if(bSnap.exists){ return { type: 'battery', id, raw: rawTrim, source: 'devices_collection' }; }
-      console.warn('Unknown device id scanned:', id);
+
+      // YANA_CHANGED: log unknown QR once per ID (throttled) so we can trace bad stickers/prints.
+      if(lastUnknownIdLogged !== id){
+        lastUnknownIdLogged = id;
+        const u = auth.currentUser;
+        logOutOfBand({
+          email: u ? u.email : null,
+          action: 'unknown_qr',
+          deviceType: 'unknown',
+          deviceId: id,
+          rawPayload: rawTrim
+        });
+        console.warn('Unknown device id scanned:', id);
+        permissionStatus.textContent = `Unknown QR: ${id}`;
+      }
       return { type: 'unknown', id, raw: rawTrim };
     } catch (err) {
       console.error('Firestore lookup failed when determining device type', err);
@@ -399,6 +432,7 @@
   /**************************************************************************
    * ========================= SUBMIT / REGISTER LOGIC ======================
    **************************************************************************/
+  // YANA_CHANGED: ensure we always re-enable the Submit button and write an error log on failure.
   submitScanBtn.addEventListener('click', async ()=>{
     const user = auth.currentUser;
     if(!user){ alert('Please sign in with Google first.'); return; }
@@ -410,38 +444,52 @@
       return;
     }
 
+    permissionStatus.textContent = 'Processing...';
+    submitScanBtn.disabled = true;
     try{
-      submitScanBtn.disabled = true;
-      permissionStatus.textContent = 'Processing...';
+      let note = '';
       if(parsed.type === 'scooter'){
-        await handleScooterScan(user.email, parsed.id, parsed.raw);
+        note = await handleScooterScan(user.email, parsed.id, parsed.raw);
       } else if(parsed.type === 'battery'){
-        await handleBatteryScan(user.email, parsed.id, parsed.raw);
+        note = await handleBatteryScan(user.email, parsed.id, parsed.raw);
       }
-      permissionStatus.textContent = 'Done';
+      permissionStatus.textContent = note ? `Done — ${note}` : 'Done';
       loadUserDevices();
       loadLogs();
-      submitScanBtn.disabled = false;
     }catch(e){
-      submitScanBtn.disabled = false;
       permissionStatus.textContent = 'Error';
       alert('Operation failed: ' + (e && e.message ? e.message : e));
       console.error(e);
+      // YANA_CHANGED: persist error to logs for audit/debug
+      await logOutOfBand({
+        email: user.email,
+        action: 'error',
+        deviceType: parsed.type,
+        deviceId: parsed.id,
+        rawPayload: parsed.raw,
+        message: e && e.message ? e.message : String(e)
+      });
+    } finally {
+      // YANA_CHANGED: ensure button is always re-enabled in every path
+      submitScanBtn.disabled = false;
     }
   });
 
   /**
    * YANA_RULE: Fix Firestore transaction order + flow.
    */
-    function safeUpdateOrCreate(tx, ref, data) {
-       tx.set(ref, data, { merge: true });
-        }
+  function safeUpdateOrCreate(tx, ref, data) {
+    tx.set(ref, data, { merge: true });
+  }
 
   // YANA_RULE: FIXED brace/flow so all logic is OUTSIDE the battery-read block.
   async function handleScooterScan(email, scooterId, rawPayload){
     const userRef = db.collection('users').doc(email);
     const scootyRef = db.collection('scooters').doc(scooterId);
     const logsRef = db.collection('logs');
+
+    // YANA_CHANGED: summary message to surface auto-heal or action info back to UI
+    let summary = '';
 
     await db.runTransaction(async (tx)=>{
       // READS FIRST
@@ -452,36 +500,60 @@
       const scootySnap = await tx.get(scootyRef);
       const scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:null, status:'free' };
 
-      let batteryRef = null, batterySnap = null;
+      let batteryRef = null, batterySnap = null, battery = null;
       if(scooty.currentBatteryId){
         batteryRef = db.collection('batteries').doc(scooty.currentBatteryId);
         batterySnap = await tx.get(batteryRef);
+        battery = batterySnap.exists ? batterySnap.data() : null;
       } // YANA_RULE: <-- close the battery read block properly
 
-      // FLOW
-      if(user.linkedScooter === scooterId){
-        if(!scooty.currentBatteryId){ throw new Error("You do not have a battery"); }
-        safeUpdateOrCreate(tx, userRef, { linkedScooter: null, linkedBattery: null });
-        tx.set(scootyRef, { currentRiderEmail:null, currentBatteryId:null }, { merge:true });
-        if(batteryRef && batterySnap && batterySnap.exists){
+      // YANA_CHANGED: Auto-heal — scooter has a battery but no rider (violates rule "no scooter-battery link without a rider").
+      if(!scooty.currentRiderEmail && scooty.currentBatteryId){
+        if(batteryRef){
           safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null });
         }
+        tx.set(scootyRef, { currentBatteryId:null }, { merge:true });
+        tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'autoheal',deviceType:'scooter',deviceId:scooterId,rawPayload, note:'cleared battery link on riderless scooter'});
+        summary += (summary?'; ':'') + 'Auto-healed: riderless scooter had battery';
+      }
+
+      // FLOW: returning scooter if rider already holds this scooter
+      if(user.linkedScooter === scooterId){
+        // Precondition per spec: scooter must have a battery to perform "scooter return (with battery)"
+        if(!scooty.currentBatteryId){
+          // YANA_CHANGED: Log invariant violation clearly and abort
+          tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'error_missing_battery_on_return',deviceType:'scooter',deviceId:scooterId,rawPayload});
+          throw new Error("Scooter return requires the scooter to have a battery linked.");
+        }
+        // Clear Rider + Scooter + Battery links together
+        safeUpdateOrCreate(tx, userRef, { linkedScooter: null, linkedBattery: null });
+        tx.set(scootyRef, { currentRiderEmail:null, currentBatteryId:null, status:'free' }, { merge:true });
+        if(batteryRef){
+          safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null, status:'free' });
+        }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
+        summary += (summary?'; ':'') + 'Returned scooter with battery';
         return;
       }
 
+      // Enforce: rider can’t take another scooter
       if(user.linkedScooter && user.linkedScooter !== scooterId){
-        throw new Error("Please return your current scooter first");
+        throw new Error("Please return your current scooter first.");
       }
 
+      // Enforce: scooter not already assigned to different rider
       if(scooty.currentRiderEmail && scooty.currentRiderEmail !== email){
-        throw new Error("This scooter is already in use");
+        throw new Error("This scooter is already assigned to a different rider.");
       }
 
+      // Assign rider ↔ scooter
       tx.update(userRef, { linkedScooter:scooterId });
-      tx.set(scootyRef, { currentRiderEmail:email, currentBatteryId:null, status:'assigned' }, { merge:true });
+      tx.set(scootyRef, { currentRiderEmail:email, /* battery stays as-is or null */ status:'assigned' }, { merge:true });
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_scooter',deviceType:'scooter',deviceId:scooterId,rawPayload});
+      summary += (summary?'; ':'') + 'Assigned scooter';
     });
+
+    return summary;
   }
 
   // YANA_RULE: define scootyRef/scootySnap when needed; delink battery even if scooter missing.
@@ -489,6 +561,9 @@
     const userRef = db.collection('users').doc(email);
     const batteryRef = db.collection('batteries').doc(batteryId);
     const logsRef = db.collection('logs');
+
+    // YANA_CHANGED: summary message to surface auto-heal or action info back to UI
+    let summary = '';
 
     await db.runTransaction(async (tx)=>{
       // READS FIRST
@@ -499,39 +574,88 @@
       const batterySnap = await tx.get(batteryRef);
       const battery = batterySnap.exists ? batterySnap.data() : { assignedScootyId:null, assignedRiderEmail:null, status:'free' };
 
-      let scootyRef = null, scootySnap = null;
+      let scootyRef = null, scootySnap = null, scooty = null;
       if(user.linkedScooter){
         scootyRef = db.collection('scooters').doc(user.linkedScooter);
         scootySnap = await tx.get(scootyRef);
+        scooty = scootySnap.exists ? scootySnap.data() : { currentBatteryId:null, currentRiderEmail:email, status:'assigned' };
       }
 
-      // FLOW
+      // YANA_CHANGED: Auto-heal a battery linked to a scooter that has no rider.
+      if(battery.assignedScootyId && (!battery.assignedRiderEmail || battery.assignedRiderEmail === email)){
+        const otherScootRef = db.collection('scooters').doc(battery.assignedScootyId);
+        const otherScootSnap = await tx.get(otherScootRef);
+        const otherScoot = otherScootSnap.exists ? otherScootSnap.data() : null;
+
+        if(otherScoot && !otherScoot.currentRiderEmail){
+          // detach from riderless scooter
+          safeUpdateOrCreate(tx, batteryRef, { assignedScootyId:null, assignedRiderEmail:null, status:'free' });
+          if(otherScoot.currentBatteryId === batteryId){
+            tx.set(otherScootRef, { currentBatteryId:null }, { merge:true });
+          }
+          tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'autoheal',deviceType:'battery',deviceId:batteryId,rawPayload, note:'cleared from riderless scooter'});
+          summary += (summary?'; ':'') + 'Auto-healed: battery was linked to riderless scooter';
+          // Refresh local battery state to "free" for subsequent checks
+          battery.assignedScootyId = null;
+          battery.assignedRiderEmail = null;
+          battery.status = 'free';
+        }
+      }
+
+      // FLOW: returning same battery (toggle off)
       if(user.linkedBattery === batteryId){
         tx.update(userRef, { linkedBattery:null });
-        safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null });
+        safeUpdateOrCreate(tx, batteryRef, { assignedScootyId: null, assignedRiderEmail: null, status:'free' });
         if(scootyRef && scootySnap && scootySnap.exists){
-          tx.update(scootyRef, { currentBatteryId:null });
+          tx.update(scootyRef, { currentBatteryId:null, status:'assigned' });
         }
         tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'return_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
+        summary += (summary?'; ':'') + 'Returned battery';
         return;
       }
 
+      // Preconditions: rider must have a scooter
       if(!user.linkedScooter){
-        throw new Error("You do not have a scooter");
+        throw new Error("You must have a scooter before taking a battery.");
       }
 
-      if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
-        throw new Error("Battery already in use");
+      // Enforce: rider can only have one battery at a time
+      if(user.linkedBattery && user.linkedBattery !== batteryId){
+        throw new Error("Please return your current battery first.");
       }
+
+      // Enforce: battery not already in use by another rider/scooter
       if(battery.assignedRiderEmail && battery.assignedRiderEmail !== email){
-        throw new Error("Battery already in use");
+        throw new Error("This battery is already assigned to another rider.");
+      }
+      if(battery.assignedScootyId && battery.assignedScootyId !== user.linkedScooter){
+        throw new Error("This battery is already assigned to a different scooter.");
       }
 
+      // Conflict resolution: scooter already has a different battery; we auto-heal by clearing that old battery.
+      if(scooty && scooty.currentBatteryId && scooty.currentBatteryId !== batteryId){
+        const oldBattId = scooty.currentBatteryId;
+        const oldBattRef = db.collection('batteries').doc(oldBattId);
+        const oldBattSnap = await tx.get(oldBattRef);
+        if(oldBattSnap.exists){
+          const oldBatt = oldBattSnap.data();
+          // Clean old battery links
+          safeUpdateOrCreate(tx, oldBattRef, { assignedScootyId:null, assignedRiderEmail:null, status:'free' });
+        }
+        tx.update(scootyRef, { currentBatteryId:null });
+        tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'autoheal',deviceType:'scooter',deviceId:user.linkedScooter,rawPayload, note:`cleared previous battery ${oldBattId} from scooter before assigning new one`});
+        summary += (summary?'; ':'') + `Auto-healed: scooter had old battery ${oldBattId}`;
+      }
+
+      // Assign battery ↔ rider ↔ scooter
       tx.update(userRef, { linkedBattery:batteryId });
       tx.set(batteryRef, { assignedScootyId:user.linkedScooter, assignedRiderEmail:email, status:'assigned' }, { merge:true });
-      if(scootyRef){ tx.update(scootyRef, { currentBatteryId:batteryId }); }
+      if(scootyRef){ tx.update(scootyRef, { currentBatteryId:batteryId, status:'assigned' }); }
       tx.set(logsRef.doc(), {ts:firebase.firestore.FieldValue.serverTimestamp(),email,action:'assign_battery',deviceType:'battery',deviceId:batteryId,rawPayload});
+      summary += (summary?'; ':'') + 'Assigned battery';
     });
+
+    return summary;
   }
 
   /**************************************************************************
@@ -564,7 +688,7 @@
         <div><strong>${d.action ? d.action.toUpperCase() : 'LOG'}</strong> &nbsp; ${d.deviceType || ''} <span style="opacity:.9">(${d.deviceId || ''})</span></div>
         <div class="muted" style="font-size:12px">${when}</div>
       </div>
-      <div class="muted" style="margin-top:6px">user: ${d.email || '—'} • payload: <code>${escapeHtml(d.rawPayload || '')}</code></div>`;
+      <div class="muted" style="margin-top:6px">user: ${d.email || '—'} • payload: <code>${escapeHtml(d.rawPayload || '')}</code>${d.note ? ' • note: '+escapeHtml(d.note) : ''}</div>`;
       logList.appendChild(el);
     });
   }
