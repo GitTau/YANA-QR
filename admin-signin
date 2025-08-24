@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Admin Sign In</title>
+  <style>
+    :root { --bg:#0a0f12; --action:#00eaff; --muted:#9aa6ac; }
+    html,body {
+      background:var(--bg); color:#eaf4f8;
+      font-family:system-ui,sans-serif;
+      margin:0; padding:20px;
+    }
+    .card {
+      background:rgba(255,255,255,0.05);
+      border-radius:12px; padding:20px;
+      max-width:480px; margin:40px auto;
+      box-shadow:0 4px 16px rgba(0,0,0,0.4);
+      text-align:center;
+    }
+    h1 { font-size:22px; margin-bottom:12px }
+    .muted { color:var(--muted); font-size:14px; margin-bottom:16px }
+    .btn {
+      background:var(--action); color:#001;
+      padding:12px 16px; border:none;
+      border-radius:8px; margin-top:16px;
+      cursor:pointer; font-weight:600;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Admin Sign In</h1>
+    <div class="muted">Restricted access — only approved admins may continue.</div>
+
+    <!-- Google Sign In Button -->
+    <button class="btn" id="adminSignin">Sign in with Google</button>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const provider = new firebase.auth.GoogleAuthProvider();
+
+    document.getElementById("adminSignin").addEventListener("click", async () => {
+      try {
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+        if (!user) throw new Error("Google sign-in failed");
+
+        const email = user.email;
+
+        // Check if this email is listed in "admins" collection
+        const snap = await db.collection("admins").doc(email).get();
+
+        if (!snap.exists) {
+          alert("You are not authorized as an admin.");
+          await auth.signOut();
+          return;
+        }
+
+        // ✅ Admin verified — redirect to dashboard
+        window.location.href = "admin-dashboard.html";
+
+      } catch (err) {
+        console.error(err);
+        alert("Admin sign in error: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
