@@ -4,80 +4,26 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>YANA — Rider Sign Up</title>
-  <style>
-    :root{
-      --bg:#0a0f12;
-      --action:#00eaff;
-      --muted:#9aa6ac;
-    }
-    html,body{
-      background:var(--bg);
-      color:#eaf4f8;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
-      margin:0;
-      padding:20px;
-    }
-    .card{
-      background:rgba(255,255,255,0.05);
-      border-radius:12px;
-      padding:20px;
-      max-width:480px;
-      margin:40px auto;
-      box-shadow:0 4px 16px rgba(0,0,0,0.4);
-    }
-    h1{font-size:20px;margin-bottom:12px}
-    .muted{color:var(--muted);font-size:13px;margin-bottom:16px}
-    label{font-size:13px;color:var(--muted);display:block;margin:8px 0 4px}
-    input,select{
-      width:100%;
-      padding:10px;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.08);
-      background:rgba(255,255,255,0.04);
-      color:#fff;
-      outline:none;
-    }
-    .btn{
-      background:var(--action);
-      color:#001;
-      padding:10px 14px;
-      border:none;
-      border-radius:8px;
-      margin-top:16px;
-      cursor:pointer;
-      font-weight:600;
-    }
-    .btn.secondary{
-      background:transparent;
-      border:1px solid var(--action);
-      color:var(--action);
-      margin-left:10px;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="card">
     <h1>Rider Sign Up</h1>
-    <div class="muted">Fill in your details. If you're already registered, you will be prompted to sign in instead.</div>
+    <div class="muted">Fill in your details. If already registered, sign in instead.</div>
 
-    <!-- Name -->
     <label>Name</label>
     <input id="regName" type="text" placeholder="Enter full name"/>
 
-    <!-- Email -->
     <label>Email</label>
     <input id="regEmail" type="email" placeholder="Enter email"/>
 
-    <!-- Phone -->
     <label>Phone Number</label>
     <input id="regPhone" type="text" placeholder="Enter phone number"/>
 
-    <!-- Vendor -->
-    <label>Current Vendor Name (optional)</label>
+    <label>Vendor (optional)</label>
     <input id="regVendor" type="text" placeholder="Enter vendor name"/>
 
-    <!-- Business Partners -->
-    <label>Business Partners (select multiple)</label>
+    <label>Business Partners</label>
     <select id="regPartners" multiple>
       <option value="BigBasket Daily">BigBasket Daily</option>
       <option value="Zomato">Zomato</option>
@@ -87,60 +33,53 @@
       <option value="Jio Instamart">Jio Instamart</option>
     </select>
 
-    <!-- Aadhaar -->
-    <label>Aadhar Number</label>
+    <label>Aadhaar Number</label>
     <input id="regAadhar" type="text" placeholder="Enter Aadhaar number"/>
 
-    <!-- Submit -->
     <button class="btn" id="submitRegistration">Sign Up</button>
     <button class="btn secondary" onclick="window.location.href='rider-signin.html'">Already registered? Sign In</button>
   </div>
 
-  <!-- Firebase SDK -->
+  <div id="toast"></div>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
-  <!-- Config -->
   <script src="firebase-config.js"></script>
-
   <script>
-    const btn = document.getElementById('submitRegistration');
-    btn.addEventListener('click', async () => {
-      try {
-        const name = (document.getElementById('regName').value||'').trim();
-        const email = (document.getElementById('regEmail').value||'').trim();
-        const phone = (document.getElementById('regPhone').value||'').trim();
-        const vendor = (document.getElementById('regVendor').value||'').trim();
-        const partners = Array.from(document.getElementById('regPartners').selectedOptions).map(o=>o.value);
-        const aadhar = (document.getElementById('regAadhar').value||'').trim();
+    const db = firebase.firestore();
+    const toast = msg => {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.style.display = "block";
+      setTimeout(()=>t.style.display="none",3000);
+    };
 
-        if(!name || !email || !phone || !aadhar){
-          alert('Please enter Name, Email, Phone, and Aadhar.');
-          return;
-        }
+    document.getElementById('submitRegistration').addEventListener('click', async () => {
+      const name = regName.value.trim();
+      const email = regEmail.value.trim();
+      const phone = regPhone.value.trim();
+      const vendor = regVendor.value.trim();
+      const partners = Array.from(regPartners.selectedOptions).map(o=>o.value);
+      const aadhar = regAadhar.value.trim();
 
-        const docRef = db.collection('users').doc(email);
-        const snap = await docRef.get();
-        if(snap.exists){
-          alert('Rider already present in database. Please sign in.');
-          window.location.href = 'rider-signin.html';
-          return;
-        }
-
-        await docRef.set({
-          name, email, phone, vendor, partners, aadhar,
-          status: 'pending',
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        alert('Registration successful. Please wait for admin approval.');
-        window.location.href = 'homepage.html';
-      } catch (err) {
-        console.error(err);
-        alert('Error during registration: ' + err.message);
+      if(!name || !email || !phone || !aadhar){
+        toast('Please fill all required fields.');
+        return;
       }
+
+      const ref = db.collection('users').doc(email);
+      const snap = await ref.get();
+      if(snap.exists){
+        toast('Rider already exists. Please sign in.');
+        return;
+      }
+
+      await ref.set({ name,email,phone,vendor,partners,aadhar,status:"pending",createdAt:firebase.firestore.FieldValue.serverTimestamp() });
+      toast('Registered successfully. Await admin approval.');
+      window.location.href='homepage.html';
     });
   </script>
 </body>
 </html>
+
