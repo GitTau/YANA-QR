@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Rider Sign In</title>
+  <style>
+    :root{
+      --bg:#0a0f12;
+      --action:#00eaff;
+      --muted:#9aa6ac;
+    }
+    html,body{
+      background:var(--bg);
+      color:#eaf4f8;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
+      margin:0;
+      padding:20px;
+    }
+    .card{
+      background:rgba(255,255,255,0.05);
+      border-radius:12px;
+      padding:20px;
+      max-width:480px;
+      margin:40px auto;
+      box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    }
+    h1{font-size:20px;margin-bottom:12px}
+    .muted{color:var(--muted);font-size:13px;margin-bottom:16px}
+    label{font-size:13px;color:var(--muted);display:block;margin:8px 0 4px}
+    input{
+      width:100%;
+      padding:10px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.04);
+      color:#fff;
+      outline:none;
+    }
+    .btn{
+      background:var(--action);
+      color:#001;
+      padding:10px 14px;
+      border:none;
+      border-radius:8px;
+      margin-top:16px;
+      cursor:pointer;
+      font-weight:600;
+    }
+    .btn.secondary{
+      background:transparent;
+      border:1px solid var(--action);
+      color:var(--action);
+      margin-left:10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Rider Sign In</h1>
+    <div class="muted">Enter your registered email to continue. If you don’t have an account, sign up first.</div>
+
+    <!-- Email -->
+    <label>Email</label>
+    <input id="signinEmail" type="email" placeholder="Enter email"/>
+
+    <!-- Sign In Button -->
+    <button class="btn" id="signinBtn">Sign In</button>
+    <button class="btn secondary" onclick="window.location.href='rider-signup.html'">New user? Sign Up</button>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    document.getElementById('signinBtn').addEventListener('click', async () => {
+      try {
+        const email = (document.getElementById('signinEmail').value||'').trim();
+        if(!email){
+          alert('Please enter your email.');
+          return;
+        }
+
+        const docRef = db.collection('users').doc(email);
+        const snap = await docRef.get();
+
+        if(!snap.exists){
+          alert('No rider found with this email. Please sign up first.');
+          window.location.href = 'rider-signup.html';
+          return;
+        }
+
+        const data = snap.data() || {};
+        if(data.status === 'approved'){
+          // Redirect to scanner/dashboard
+          window.location.href = 'scanner.html?email=' + encodeURIComponent(email);
+        } else if(data.status === 'pending'){
+          alert('Your registration is still pending admin approval.');
+        } else if(data.status === 'rejected'){
+          alert('Your registration has been rejected. Contact admin.');
+        } else {
+          alert('Unknown status. Please contact support.');
+        }
+
+      } catch(err){
+        console.error(err);
+        alert('Sign in error: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
