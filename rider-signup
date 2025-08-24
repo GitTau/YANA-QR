@@ -5,142 +5,157 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>YANA — Rider Sign Up</title>
   <style>
-    :root{
-      --bg:#0a0f12;
-      --action:#00eaff;
-      --muted:#9aa6ac;
-    }
+    :root{ --bg:#0a0f12; --action:#00eaff; --muted:#9aa6ac; }
     html,body{
-      background:var(--bg);
-      color:#eaf4f8;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
-      margin:0;
-      padding:20px;
+      background:var(--bg); color:#eaf4f8;
+      font-family:system-ui,sans-serif; margin:0; padding:20px;
     }
     .card{
       background:rgba(255,255,255,0.05);
-      border-radius:12px;
-      padding:20px;
-      max-width:480px;
-      margin:40px auto;
-      box-shadow:0 4px 16px rgba(0,0,0,0.4);
+      border-radius:12px; padding:20px; max-width:480px;
+      margin:40px auto; box-shadow:0 4px 16px rgba(0,0,0,0.4);
     }
-    h1{font-size:20px;margin-bottom:12px}
-    .muted{color:var(--muted);font-size:13px;margin-bottom:16px}
-    label{font-size:13px;color:var(--muted);display:block;margin:8px 0 4px}
+    h1{ font-size:20px; margin-bottom:12px }
+    .muted{ color:var(--muted); font-size:13px; margin-bottom:16px }
+    label{ font-size:13px; color:var(--muted); display:block; margin:8px 0 4px }
     input,select{
-      width:100%;
-      padding:10px;
-      border-radius:8px;
+      width:100%; padding:10px; border-radius:8px;
       border:1px solid rgba(255,255,255,0.08);
-      background:rgba(255,255,255,0.04);
-      color:#fff;
-      outline:none;
+      background:rgba(255,255,255,0.04); color:#fff; outline:none;
     }
     .btn{
-      background:var(--action);
-      color:#001;
-      padding:10px 14px;
-      border:none;
-      border-radius:8px;
-      margin-top:16px;
-      cursor:pointer;
-      font-weight:600;
+      background:var(--action); color:#001; padding:10px 14px;
+      border:none; border-radius:8px; margin-top:16px;
+      cursor:pointer; font-weight:600;
     }
     .btn.secondary{
-      background:transparent;
-      border:1px solid var(--action);
-      color:var(--action);
-      margin-left:10px;
+      background:transparent; border:1px solid var(--action);
+      color:var(--action); margin-left:10px;
     }
+    .readonly { background:rgba(255,255,255,0.1); }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Rider Sign Up</h1>
-    <div class="muted">Fill in your details. If you're already registered, you will be prompted to sign in instead.</div>
+    <div class="muted">Sign in with Google to continue registration.</div>
 
-    <!-- Name -->
-    <label>Name</label>
-    <input id="regName" type="text" placeholder="Enter full name"/>
+    <!-- Google Sign In -->
+    <button class="btn" id="googleSignin">Continue with Google</button>
 
-    <!-- Email -->
-    <label>Email</label>
-    <input id="regEmail" type="email" placeholder="Enter email"/>
+    <div id="formSection" style="display:none;">
+      <!-- Name -->
+      <label>Name</label>
+      <input id="regName" type="text" placeholder="Enter full name"/>
 
-    <!-- Phone -->
-    <label>Phone Number</label>
-    <input id="regPhone" type="text" placeholder="Enter phone number"/>
+      <!-- Email (readonly, from Google) -->
+      <label>Email</label>
+      <input id="regEmail" type="email" class="readonly" readonly/>
 
-    <!-- Vendor -->
-    <label>Current Vendor Name (optional)</label>
-    <input id="regVendor" type="text" placeholder="Enter vendor name"/>
+      <!-- Phone -->
+      <label>Phone Number</label>
+      <input id="regPhone" type="text" placeholder="Enter phone number"/>
 
-    <!-- Business Partners -->
-    <label>Business Partners (select multiple)</label>
-    <select id="regPartners" multiple>
-      <option value="BigBasket Daily">BigBasket Daily</option>
-      <option value="Zomato">Zomato</option>
-      <option value="Swiggy">Swiggy</option>
-      <option value="Swiggy Instamart">Swiggy Instamart</option>
-      <option value="BlinkIt">BlinkIt</option>
-      <option value="Jio Instamart">Jio Instamart</option>
-    </select>
+      <!-- Vendor -->
+      <label>Current Vendor Name (optional)</label>
+      <input id="regVendor" type="text" placeholder="Enter vendor name"/>
 
-    <!-- Aadhaar -->
-    <label>Aadhar Number</label>
-    <input id="regAadhar" type="text" placeholder="Enter Aadhaar number"/>
+      <!-- Business Partners -->
+      <label>Business Partners (select multiple)</label>
+      <select id="regPartners" multiple>
+        <option value="BigBasket Daily">BigBasket Daily</option>
+        <option value="Zomato">Zomato</option>
+        <option value="Swiggy">Swiggy</option>
+        <option value="Swiggy Instamart">Swiggy Instamart</option>
+        <option value="BlinkIt">BlinkIt</option>
+        <option value="Jio Instamart">Jio Instamart</option>
+      </select>
 
-    <!-- Submit -->
-    <button class="btn" id="submitRegistration">Sign Up</button>
-    <button class="btn secondary" onclick="window.location.href='rider-signin.html'">Already registered? Sign In</button>
+      <!-- Aadhaar -->
+      <label>Aadhaar Number</label>
+      <input id="regAadhar" type="text" placeholder="Enter Aadhaar number"/>
+
+      <!-- Buttons -->
+      <button class="btn" id="submitRegistration">Submit Registration</button>
+      <button class="btn secondary" onclick="window.location.href='rider-signin.html'">Already registered? Sign In</button>
+    </div>
   </div>
 
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
-  <!-- Config -->
   <script src="firebase-config.js"></script>
 
   <script>
-    const btn = document.getElementById('submitRegistration');
-    btn.addEventListener('click', async () => {
-      try {
-        const name = (document.getElementById('regName').value||'').trim();
-        const email = (document.getElementById('regEmail').value||'').trim();
-        const phone = (document.getElementById('regPhone').value||'').trim();
-        const vendor = (document.getElementById('regVendor').value||'').trim();
-        const partners = Array.from(document.getElementById('regPartners').selectedOptions).map(o=>o.value);
-        const aadhar = (document.getElementById('regAadhar').value||'').trim();
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const provider = new firebase.auth.GoogleAuthProvider();
 
-        if(!name || !email || !phone || !aadhar){
-          alert('Please enter Name, Email, Phone, and Aadhar.');
+    const googleBtn = document.getElementById("googleSignin");
+    const formSection = document.getElementById("formSection");
+
+    let googleUser = null;
+
+    googleBtn.addEventListener("click", async () => {
+      try {
+        const result = await auth.signInWithPopup(provider);
+        googleUser = result.user;
+        if(!googleUser) throw new Error("Google sign-in failed");
+
+        // Pre-fill fields
+        document.getElementById("regEmail").value = googleUser.email;
+        document.getElementById("regName").value = googleUser.displayName || "";
+
+        // Show the form
+        formSection.style.display = "block";
+        googleBtn.style.display = "none";
+      } catch(err){
+        console.error(err);
+        alert("Google sign-in error: " + err.message);
+      }
+    });
+
+    document.getElementById("submitRegistration").addEventListener("click", async () => {
+      try {
+        if(!googleUser){ alert("Please sign in with Google first."); return; }
+
+        const name = (document.getElementById("regName").value||"").trim();
+        const email = googleUser.email;
+        const phone = (document.getElementById("regPhone").value||"").trim();
+        const vendor = (document.getElementById("regVendor").value||"").trim();
+        const partners = Array.from(document.getElementById("regPartners").selectedOptions).map(o=>o.value);
+        const aadhar = (document.getElementById("regAadhar").value||"").trim();
+
+        if(!name || !phone || !aadhar){
+          alert("Please complete all required fields: Name, Phone, Aadhaar.");
           return;
         }
 
-        const docRef = db.collection('users').doc(email);
+        const docRef = db.collection("users").doc(email);
         const snap = await docRef.get();
+
         if(snap.exists){
-          alert('Rider already present in database. Please sign in.');
-          window.location.href = 'rider-signin.html';
+          alert("Rider already present in database. Please sign in instead.");
+          window.location.href = "rider-signin.html";
           return;
         }
 
         await docRef.set({
           name, email, phone, vendor, partners, aadhar,
-          status: 'pending',
+          status: "pending",
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        alert('Registration successful. Please wait for admin approval.');
-        window.location.href = 'homepage.html';
-      } catch (err) {
+        alert("Registration successful. Please wait for admin approval.");
+        window.location.href = "homepage.html";
+
+      } catch(err){
         console.error(err);
-        alert('Error during registration: ' + err.message);
+        alert("Error during registration: " + err.message);
       }
     });
   </script>
 </body>
 </html>
+
