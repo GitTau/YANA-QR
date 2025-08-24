@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Welcome</title>
+  <style>
+    :root {
+      --bg:#0a0f12;
+      --action:#00eaff;
+      --muted:#9aa6ac;
+    }
+    html,body {
+      background:var(--bg);
+      color:#eaf4f8;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;
+      margin:0;
+      height:100%;
+    }
+    .center {
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      text-align:center;
+      padding:20px;
+    }
+    h1 { font-size:28px; margin-bottom:8px; }
+    p { color:var(--muted); margin-bottom:24px; font-size:14px; }
+    .btn {
+      background:var(--action);
+      color:#001;
+      padding:12px 20px;
+      border:none;
+      border-radius:8px;
+      margin:8px 0;
+      font-weight:600;
+      font-size:16px;
+      cursor:pointer;
+      width:220px;
+    }
+    .btn.secondary {
+      background:transparent;
+      color:var(--action);
+      border:1px solid var(--action);
+    }
+  </style>
+</head>
+<body>
+  <div class="center">
+    <h1>Welcome to YANA</h1>
+    <p>Track your rides and devices securely</p>
+    <button class="btn" onclick="window.location.href='rider-signup.html'">Rider Sign Up</button>
+    <button class="btn secondary" onclick="window.location.href='rider-signin.html'">Rider Sign In</button>
+    <button class="btn secondary" onclick="window.location.href='admin.html'">Admin Sign In</button>
+  </div>
+</body>
+</html>
