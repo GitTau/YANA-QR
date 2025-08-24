@@ -37,9 +37,12 @@
 
   <table id="usersTable" style="display:none">
     <thead>
-      <tr>
-        <th>Name</th><th>Email</th><th>Phone</th><th>Aadhar</th><th>Submitted</th><th>Status</th><th>Actions</th>
-      </tr>
+<tr>
+  <th>Name</th><th>Email</th><th>Phone</th>
+  <th>Vendor</th><th>Business Partners</th>
+  <th>Aadhar</th><th>Submitted</th><th>Status</th><th>Actions</th>
+</tr>
+
     </thead>
     <tbody id="usersBody"></tbody>
   </table>
@@ -130,14 +133,19 @@
       const pillClass = status === 'approved' ? 'approved' : (status === 'rejected' ? 'rejected' : 'pending');
       const submittedStr = (u.submittedAt && u.submittedAt.toDate) ? u.submittedAt.toDate().toLocaleString() :
                            (u.createdAt && u.createdAt.toDate ? u.createdAt.toDate().toLocaleString() : '—');
-      tr.innerHTML = `
-        <td>${escapeHtml(u.name || "")}</td>
-        <td>${escapeHtml(u.email || u.id || "")}</td>
-        <td>${escapeHtml(u.phone || "")}</td>
-        <td>${escapeHtml(u.aadhar || "")}</td>
-        <td>${submittedStr}</td>
-        <td><span class="pill ${pillClass}">${status}</span></td>
-        <td>
+     tr.innerHTML = `
+  <td>${escapeHtml(u.name || "")}</td>
+  <td>${escapeHtml(u.email || u.id || "")}</td>
+  <td>${escapeHtml(u.phone || "")}</td>
+  <td>${escapeHtml(u.currentVendor || "")}</td>
+  <td>${escapeHtml((u.businessPartners || []).join(", "))}</td>
+  <td>${escapeHtml(u.aadhar || "")}</td>
+  <td>${submittedStr}</td>
+  <td><span class="pill ${pillClass}">${status}</span></td>
+  <td>
+    <button class="btn approve">Approve</button>
+    <button class="btn reject">Reject</button>
+  </td>`;
           <button class="btn approve">Approve</button>
           <button class="btn reject">Reject</button>
         </td>`;
@@ -159,3 +167,4 @@
   </script>
 </body>
 </html>
+
