@@ -4,264 +4,164 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>YANA — Scanner</title>
-  <style>
-    :root { --bg:#0a0f12; --action:#00eaff; --muted:#9aa6ac; }
-    body { background:var(--bg); color:#eaf4f8; font-family:system-ui,sans-serif; margin:0; }
-    header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; background:rgba(255,255,255,0.04); }
-    .brand { font-weight:600; font-size:18px; }
-    .btn { background:var(--action); color:#001; border:none; padding:8px 14px; border-radius:8px; font-weight:600; cursor:pointer; }
-    .btn.ghost { background:transparent; border:1px solid var(--action); color:var(--action); }
-    main { display:grid; grid-template-columns:2fr 1fr; gap:20px; padding:20px; }
-    video { width:100%; border-radius:12px; background:#000; }
-    .card { background:rgba(255,255,255,0.05); border-radius:12px; padding:16px; margin-bottom:16px; }
-    .status { font-size:13px; margin-top:6px; color:var(--muted); }
-    .info-row { display:flex; justify-content:space-between; margin:6px 0; }
-    .log-list { max-height:300px; overflow:auto; font-size:13px; }
-    .log-item { border-bottom:1px solid rgba(255,255,255,0.08); padding:6px 0; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <div class="brand">YANA — QR Scanner</div>
-    <div><span id="userEmail" class="status">Loading...</span></div>
-  </header>
+  <div class="container">
+    <h1>QR Scanner</h1>
+    <p class="muted">Scan scooters and batteries to assign or return them.</p>
 
-  <main id="scannerUI" style="display:none">
-    <!-- Scanner UI -->
-    <section>
-      <div class="card">
-        <h3>Camera</h3>
-        <video id="video" playsinline></video>
-        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="startCam" class="btn">Start Camera</button>
-          <button id="stopCam" class="btn ghost" style="display:none">Stop Camera</button>
-          <select id="scanMode" class="btn ghost">
-            <option value="auto">Auto</option>
-            <option value="scooter">Scooter</option>
-            <option value="battery">Battery</option>
-          </select>
-        </div>
-        <div class="status">Last QR: <span id="lastDecoded">—</span></div>
-        <div class="status">Parsed: <span id="lastParsed">—</span></div>
-      </div>
+    <div class="panel">
+      <h2>Camera</h2>
+      <video id="preview" autoplay playsinline></video>
+      <p id="status">Initializing camera...</p>
+      <button class="btn secondary" id="signOutBtn">Sign Out</button>
+    </div>
 
-      <div class="card">
-        <h3>Location</h3>
-        <select id="locationSelect" class="btn ghost" style="width:100%">
-          <option value="">-- Select Location --</option>
-          <option value="ZAP POINT OD02">ZAP POINT OD02</option>
-          <option value="BB STORE - Satyanagar">BB STORE - Satyanagar</option>
-        </select>
-        <button id="submitBtn" class="btn" style="margin-top:10px;" disabled>Submit</button>
-      </div>
-    </section>
+    <div class="panel" id="assignments">
+      <h2>Current Assignments</h2>
+      <p>Scooter: <span id="currentScooter">None</span></p>
+      <p>Battery: <span id="currentBattery">None</span></p>
+    </div>
 
-    <!-- Sidebar -->
-    <aside>
-      <div class="card">
-        <h3>Rider Info</h3>
-        <div class="info-row"><span>Email</span><span id="riderInfo">—</span></div>
-        <div class="info-row"><span>Scooter</span><span id="linkedScooter">—</span></div>
-        <div class="info-row"><span>Battery</span><span id="linkedBattery">—</span></div>
-      </div>
-      <div class="card">
-        <h3>Logs</h3>
-        <div class="log-list" id="logList"></div>
-      </div>
-    </aside>
-  </main>
+    <div class="panel">
+      <h2>Logs</h2>
+      <div id="logs"></div>
+    </div>
+  </div>
 
-  <!-- SDKs -->
+  <div id="toast"></div>
+
+  <!-- Firebase + ZXing -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
   <script src="firebase-config.js"></script>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
 
   <script>
     const auth = firebase.auth();
     const db = firebase.firestore();
+    const toast = msg => { const t=document.getElementById("toast");t.innerText=msg;t.style.display="block";setTimeout(()=>t.style.display="none",3000);};
 
-    // UI refs
-    const userEmail = document.getElementById('userEmail');
-    const riderInfo = document.getElementById('riderInfo');
-    const linkedScooter = document.getElementById('linkedScooter');
-    const linkedBattery = document.getElementById('linkedBattery');
-    const logList = document.getElementById('logList');
-    const scannerUI = document.getElementById('scannerUI');
+    let currentUser = null;
+    let lastScan = "";
 
-    // Camera + scan refs
-    const video = document.getElementById('video');
-    const lastDecoded = document.getElementById('lastDecoded');
-    const lastParsed = document.getElementById('lastParsed');
-    const locationSelect = document.getElementById('locationSelect');
-    const submitBtn = document.getElementById('submitBtn');
-    const startCamBtn = document.getElementById('startCam');
-    const stopCamBtn = document.getElementById('stopCam');
-    const scanMode = document.getElementById('scanMode');
-
-    let parsed = {type:"",id:""};
-    let lastResult=null, stream=null, scanning=false;
-
-    // Auth & gating
-    auth.onAuthStateChanged(async (user)=>{
-      if(!user){
-        alert("Please sign in first.");
-        window.location.href = "rider-signin.html";
-        return;
-      }
-      userEmail.textContent = user.email;
-      await checkApproval(user.email);
+    // Sign out
+    document.getElementById("signOutBtn").addEventListener("click", () => {
+      auth.signOut().then(()=>window.location.href="homepage.html");
     });
 
-    async function checkApproval(email){
-      const snap = await db.collection("users").doc(email).get();
-      if(!snap.exists){
-        alert("Not registered. Redirecting to signup.");
-        window.location.href = "rider-signup.html";
+    // Auth state
+    auth.onAuthStateChanged(async user=>{
+      if(!user){
+        window.location.href="rider-signin.html";
         return;
       }
-      const data = snap.data();
-      if(data.status !== "approved"){
-        alert("Your account is not approved yet.");
-        window.location.href = "rider-signin.html";
+      currentUser = user;
+      const snap = await db.collection("users").doc(user.email).get();
+      if(!snap.exists || snap.data().status!=="approved"){
+        toast("You are not approved to use the scanner.");
+        auth.signOut();
         return;
       }
-      scannerUI.style.display = "grid";
-      riderInfo.textContent = email;
-      linkedScooter.textContent = data.linkedScooter || "—";
-      linkedBattery.textContent = data.linkedBattery || "—";
-      loadLogs(email);
-    }
+      setupRealtimeAssignments(user.email);
+      startScanner();
+      loadLogs(user.email);
+    });
 
-    async function loadLogs(email){
-      logList.innerHTML = "";
-      const q = await db.collection("logs")
-        .where("email","==",email)
-        .orderBy("ts","desc").limit(20).get();
-      q.forEach(doc=>{
-        const d = doc.data();
-        const div = document.createElement("div");
-        div.className="log-item";
-        div.textContent = `${d.action||""} • ${d.deviceId||""} • ${d.location||""}`;
-        logList.appendChild(div);
+    // Realtime updates of scooter/battery
+    function setupRealtimeAssignments(email){
+      db.collection("users").doc(email).onSnapshot(doc=>{
+        const data=doc.data()||{};
+        document.getElementById("currentScooter").innerText = data.scooterId||"None";
+        document.getElementById("currentBattery").innerText = data.batteryId||"None";
       });
     }
 
-    // Camera
-    async function startCamera(){
-      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      video.srcObject=stream; await video.play();
-      scanning=true; scanLoop();
-      startCamBtn.style.display="none"; stopCamBtn.style.display="inline-block";
+    // Load last 10 logs
+    function loadLogs(email){
+      db.collection("logs").where("email","==",email)
+        .orderBy("timestamp","desc").limit(10)
+        .onSnapshot(snap=>{
+          const logs=document.getElementById("logs");
+          logs.innerHTML="";
+          snap.forEach(doc=>{
+            const d=doc.data();
+            const div=document.createElement("div");
+            div.className="log";
+            div.innerText=`[${d.timestamp?.toDate().toLocaleString()||""}] ${d.type} ${d.deviceId} → ${d.action}`;
+            logs.appendChild(div);
+          });
+        });
     }
-    function stopCamera(){
-      scanning=false;
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
-      startCamBtn.style.display="inline-block"; stopCamBtn.style.display="none";
-    }
-    startCamBtn.onclick = startCamera;
-    stopCamBtn.onclick = stopCamera;
 
-    function scanLoop(){
-      const canvas=document.createElement("canvas");
-      const ctx=canvas.getContext("2d",{willReadFrequently:true});
-      setInterval(()=>{
-        if(!scanning||!video.videoWidth) return;
-        canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-        ctx.drawImage(video,0,0,canvas.width,canvas.height);
-        const img=ctx.getImageData(0,0,canvas.width,canvas.height);
-        const code=jsQR(img.data,canvas.width,canvas.height);
-        if(code && code.data!==lastResult){
-          lastResult=code.data;
-          lastDecoded.textContent=code.data;
-          parsed=parsePayload(code.data);
-          lastParsed.textContent=parsed.type+" → "+parsed.id;
+    // Scanner
+    function startScanner(){
+      const codeReader = new ZXing.BrowserQRCodeReader();
+      codeReader.decodeFromVideoDevice(null,"preview",(result,err)=>{
+        if(result){
+          const code=result.text.trim();
+          if(code!==lastScan){ lastScan=code; handleScan(code); }
         }
-      },400);
+      });
     }
 
-    function parsePayload(raw){
-      if(!raw) return {type:"",id:""};
-      raw=raw.trim();
-      if(/^YEV\d+/i.test(raw)) return {type:"scooter",id:raw.toUpperCase()};
-      if(/^YBT\d+/i.test(raw)) return {type:"battery",id:raw.toUpperCase()};
-      if(/^scooter:/i.test(raw)) return {type:"scooter",id:raw.split(":")[1]};
-      if(/^battery:/i.test(raw)) return {type:"battery",id:raw.split(":")[1]};
-      return {type:"unknown",id:""};
-    }
-
-    locationSelect.onchange=()=>{ submitBtn.disabled=!locationSelect.value; };
-
-    submitBtn.onclick=async ()=>{
-      const u=auth.currentUser;
-      if(!u) return alert("Please sign in first");
-      if(!parsed.id) return alert("No QR detected");
-      const loc=locationSelect.value;
-      if(!loc) return alert("Select location first");
-
-      try{
-        if(parsed.type==="scooter"){ await handleScooter(u.email,parsed.id,loc); }
-        else if(parsed.type==="battery"){ await handleBattery(u.email,parsed.id,loc); }
-        else { alert("Unknown QR type"); return; }
-        await loadLogs(u.email);
-      }catch(e){ alert("Error: "+e.message); console.error(e); }
-    };
-
-    // Scooter handling
-    async function handleScooter(email,id,loc){
+    // Handle QR scan
+    async function handleScan(code){
+      if(!currentUser) return;
+      const email=currentUser.email;
       const ref=db.collection("users").doc(email);
-      const snap=await ref.get(); const data=snap.data();
-      if(data.linkedScooter===id){
-        // Return scooter
-        if(data.linkedBattery){
-          throw new Error("Return battery first!");
+      const snap=await ref.get();
+      const data=snap.data()||{};
+      const isScooter=code.startsWith("SCOOTER");
+      const isBattery=code.startsWith("BATTERY");
+
+      if(isScooter){
+        if(data.scooterId && data.scooterId!==code){
+          toast("Return your current scooter first.");
+          return;
         }
-        await ref.update({linkedScooter:firebase.firestore.FieldValue.delete()});
-        await logAction(email,"return_scooter",id,loc);
-        linkedScooter.textContent="—";
-        alert("Scooter returned successfully");
-      }else if(data.linkedScooter){
-        throw new Error("You already have a scooter assigned");
-      }else{
-        // Assign scooter
-        await ref.update({linkedScooter:id});
-        await logAction(email,"assign_scooter",id,loc);
-        linkedScooter.textContent=id;
-        alert("Scooter assigned successfully");
+        if(data.scooterId===code){
+          await ref.update({scooterId:firebase.firestore.FieldValue.delete()});
+          await logAction(email,code,"scooter","returned");
+          toast("Scooter returned.");
+        } else {
+          await ref.update({scooterId:code});
+          await logAction(email,code,"scooter","assigned");
+          toast("Scooter assigned.");
+        }
+      } else if(isBattery){
+        if(!data.scooterId){
+          toast("Assign a scooter before taking a battery.");
+          return;
+        }
+        if(data.batteryId && data.batteryId!==code){
+          toast("Return your current battery first.");
+          return;
+        }
+        if(data.batteryId===code){
+          await ref.update({batteryId:firebase.firestore.FieldValue.delete()});
+          await logAction(email,code,"battery","returned");
+          toast("Battery returned.");
+        } else {
+          await ref.update({batteryId:code});
+          await logAction(email,code,"battery","assigned");
+          toast("Battery assigned.");
+        }
+      } else {
+        toast("Invalid QR code.");
       }
     }
 
-    // Battery handling
-    async function handleBattery(email,id,loc){
-      const ref=db.collection("users").doc(email);
-      const snap=await ref.get(); const data=snap.data();
-      if(!data.linkedScooter){
-        throw new Error("Assign a scooter before a battery");
-      }
-      if(data.linkedBattery===id){
-        // Return battery
-        await ref.update({linkedBattery:firebase.firestore.FieldValue.delete()});
-        await logAction(email,"return_battery",id,loc);
-        linkedBattery.textContent="—";
-        alert("Battery returned successfully");
-      }else if(data.linkedBattery){
-        throw new Error("You already have a battery assigned");
-      }else{
-        // Assign battery
-        await ref.update({linkedBattery:id});
-        await logAction(email,"assign_battery",id,loc);
-        linkedBattery.textContent=id;
-        alert("Battery assigned successfully");
-      }
-    }
-
-    async function logAction(email,action,deviceId,location){
+    // Log action
+    async function logAction(email,deviceId,type,action){
       await db.collection("logs").add({
-        email,action,deviceId,location,
-        ts:firebase.firestore.FieldValue.serverTimestamp()
+        email, deviceId, type, action,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
     }
   </script>
 </body>
 </html>
+
