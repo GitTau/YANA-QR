@@ -58,31 +58,60 @@
         <button id="signoutBtn" class="btn small ghost" style="display:none">Sign out</button>
       </div>
     </header>
-
-    <!-- Registration -->
-    <div id="registrationUI" class="card" style="display:none; margin-bottom:18px;">
-      <div style="font-weight:700;margin-bottom:10px">Rider Registration</div>
-      <div class="muted" style="margin-bottom:10px">Please complete your details. Admin will approve your access.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
-        <div><div class="muted" style="font-size:12px">Name</div><div id="regName" style="font-weight:600">—</div></div>
-        <div><div class="muted" style="font-size:12px">Email</div><div id="regEmail" style="font-weight:600">—</div></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div>
-          <label class="muted" style="font-size:12px">Phone Number</label>
-          <input id="regPhone" class="form-input" type="text" placeholder="Enter phone number">
-        </div>
-        <div>
-          <label class="muted" style="font-size:12px">Aadhar Number</label>
-          <input id="regAadhar" class="form-input" type="text" placeholder="Enter Aadhar number">
-        </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-        <button id="submitRegistration" class="btn small">Submit Registration</button>
-        <div class="muted" style="font-size:12px">Status: <span id="regStatus">Pending</span></div>
-      </div>
+<!-- Registration -->
+<div id="registrationUI" class="card" style="display:none; margin-bottom:18px;">
+  <div style="font-weight:700;margin-bottom:10px">Rider Registration</div>
+  <div class="muted" style="margin-bottom:10px">Please complete your details. Admin will approve your access.</div>
+  
+  <!-- Name and Email -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+    <div>
+      <label class="muted" style="font-size:12px">Name</label>
+      <input id="regName" class="form-input" type="text" placeholder="Enter your full name">
     </div>
+    <div>
+      <label class="muted" style="font-size:12px">Email</label>
+      <div id="regEmail" style="font-weight:600">—</div> <!-- read-only -->
+    </div>
+  </div>
 
+  <!-- Phone -->
+  <div style="margin-top:12px">
+    <label class="muted" style="font-size:12px">Phone Number</label>
+    <input id="regPhone" class="form-input" type="text" placeholder="Enter phone number">
+  </div>
+
+  <!-- Vendor -->
+  <div style="margin-top:12px">
+    <label class="muted" style="font-size:12px">Current Vendor Name</label>
+    <input id="regVendor" class="form-input" type="text" placeholder="Enter Vendor Name">
+  </div>
+
+  <!-- Business Partners -->
+  <div style="margin-top:12px">
+    <label class="muted" style="font-size:12px">Business Partners (select multiple)</label>
+    <select id="regPartners" class="form-input" multiple>
+      <option value="BigBasket Daily">BigBasket Daily</option>
+      <option value="Zomato">Zomato</option>
+      <option value="Swiggy">Swiggy</option>
+      <option value="Swiggy Instamart">Swiggy Instamart</option>
+      <option value="BlinkIt">BlinkIt</option>
+      <option value="Jio Instamart">Jio Instamart</option>
+    </select>
+  </div>
+
+  <!-- Aadhar at the end -->
+  <div style="margin-top:12px">
+    <label class="muted" style="font-size:12px">Aadhar Number</label>
+    <input id="regAadhar" class="form-input" type="text" placeholder="Enter Aadhar number">
+  </div>
+
+  <!-- Submit and Status -->
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+    <button id="submitRegistration" class="btn small">Submit Registration</button>
+    <div class="muted" style="font-size:12px">Status: <span id="regStatus">Pending</span></div>
+  </div>
+</div>
     <!-- App main (gated by approval) -->
     <div id="appMain" class="grid" style="display:none">
       <div class="card scanner">
@@ -181,7 +210,7 @@
   const signinBtn = document.getElementById('signinBtn');
   const signoutBtn = document.getElementById('signoutBtn');
   const userEmailEl = document.getElementById('user-email');
-  const riderInfo = document.getElementById('riderInfo');
+  const riderInfo = document.getElementById('riderInfo')
   const linkedScooter = document.getElementById('linkedScooter');
   const linkedBattery = document.getElementById('linkedBattery');
   const logList = document.getElementById('logList');
@@ -216,21 +245,23 @@
       const uDocRef = db.collection('users').doc(user.email);
 
       // Ensure a base user doc exists
-      await db.runTransaction(async (tx) => {
-        const snap = await tx.get(uDocRef);
-        if (!snap.exists) {
-          tx.set(uDocRef, {
-            email: user.email,
-            name: user.displayName || "",
-            phone: null,
-            aadhar: null,
-            status: "pending",
-            linkedScooter: null,
-            linkedBattery: null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-        }
-      });
+    await db.runTransaction(async (tx) => {
+  const snap = await tx.get(uDocRef);
+  if (!snap.exists) {
+    tx.set(uDocRef, {
+      email: user.email,
+      name: user.displayName || '',
+      phone: null,
+      currentVendor: null,
+      businessPartners: [],
+      aadhar: null,
+      status: 'pending',
+      linkedScooter: null,
+      linkedBattery: null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+});
 
       attachRegistrationHandler();
       checkUserStatus(user.email, user.displayName);
@@ -251,76 +282,100 @@
   /*******************************
    * UI helpers & registration
    *******************************/
-  async function checkUserStatus(email, displayName) {
-    try{
-      const userRef = db.collection('users').doc(email);
-      const snap = await userRef.get();
-      if(!snap.exists){
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = 'none';
+
+async function checkUserStatus(email, displayName) {
+  try {
+    const userRef = db.collection('users').doc(email);
+    const snap = await userRef.get();
+    if (!snap.exists) {
+      document.getElementById('appMain').style.display = 'none';
+      document.getElementById('registrationUI').style.display = 'none';
+      return;
+    }
+
+    const data = snap.data() || {};
+
+    if (data.status === 'approved') {
+      // Registration approved → show main app
+      document.getElementById('appMain').style.display = '';
+      document.getElementById('registrationUI').style.display = 'none';
+      loadUserDevices();
+      loadLogs();
+    } else {
+      // Registration missing, pending, or rejected → force registration UI
+      document.getElementById('appMain').style.display = 'none';
+      document.getElementById('registrationUI').style.display = '';
+      document.getElementById('regName').value = displayName || '';
+      document.getElementById('regEmail').textContent = email || '';
+      document.getElementById('regStatus').textContent =
+        data.status === 'rejected' ? 'Rejected' : 'Pending';
+      if (data.status === 'rejected') {
+        alert('Your registration has been rejected. Please contact support.');
+      }
+    }
+  } catch (e) {
+    console.error('Status check error', e);
+  }
+}
+
+function attachRegistrationHandler() {
+  const btn = document.getElementById('submitRegistration');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+
+  btn.addEventListener('click', async () => {
+    try {
+      const u = auth.currentUser;
+      if (!u) {
+        alert('Please sign in first');
         return;
       }
-      const data = snap.data() || {};
-      if(data.status === 'approved'){
-        document.getElementById('appMain').style.display = '';
-        document.getElementById('registrationUI').style.display = 'none';
-        loadUserDevices();
-        loadLogs();
-      } else if(data.status === 'pending' || !data.status){
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = '';
-        document.getElementById('regName').textContent = displayName || '';
-        document.getElementById('regEmail').textContent = email || '';
-        document.getElementById('regStatus').textContent = 'Pending';
-      } else if(data.status === 'rejected'){
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = 'none';
-        alert('Your registration has been rejected. Please contact support.');
-      } else {
-        document.getElementById('appMain').style.display = 'none';
-        document.getElementById('registrationUI').style.display = '';
-      }
-    }catch(e){
-      console.error('Status check error', e);
-    }
-  }
 
-  function attachRegistrationHandler(){
-    const btn = document.getElementById('submitRegistration');
-    if(!btn || btn.dataset.bound === "1") return;
-    btn.dataset.bound = "1";
-    btn.addEventListener('click', async ()=>{
-      try{
-        const u = auth.currentUser;
-        if(!u){ alert('Please sign in first'); return; }
-        const phone = (document.getElementById('regPhone').value||'').trim();
-        const aadhar = (document.getElementById('regAadhar').value||'').trim();
-        if(!phone || !aadhar){
-          alert('Please enter phone and aadhar.');
-          return;
-        }
-        btn.disabled = true;
-        const userRef = db.collection('users').doc(u.email);
-        const snap = await userRef.get();
-        const payload = {
-          phone, aadhar,
-          status:'pending',
-          submittedAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        if(!snap.exists || !snap.data().createdAt){
-          payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        }
-        await userRef.set(payload, { merge:true });
-        document.getElementById('regStatus').textContent = 'Pending (submitted)';
-        alert('Registration submitted. Wait for admin approval.');
-      }catch(err){
-        console.error('Registration submit error', err);
-        alert('Failed to submit registration: ' + (err.message || 'Unknown error'));
-      } finally {
-        btn.disabled = false;
+      const name = (document.getElementById('regName').value || '').trim();
+      const phone = (document.getElementById('regPhone').value || '').trim();
+      const vendor = (document.getElementById('regVendor').value || '').trim();
+      const partners = Array.from(
+        document.getElementById('regPartners').selectedOptions
+      ).map(o => o.value);
+      const aadhar = (document.getElementById('regAadhar').value || '').trim();
+
+      // Make name, phone, and aadhar mandatory
+      if (!name || !phone || !aadhar) {
+        alert('Please enter name, phone, and aadhar.');
+        return;
       }
-    });
-  }
+
+      btn.disabled = true;
+      const userRef = db.collection('users').doc(u.email);
+      const snap = await userRef.get();
+
+      const payload = {
+        name,
+        phone,
+        currentVendor: vendor || null,       // optional
+        businessPartners: partners || [],    // optional
+        aadhar,
+        status: 'pending',
+        submittedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      if (!snap.exists || !snap.data().createdAt) {
+        payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      }
+
+      await userRef.set(payload, { merge: true });
+
+      document.getElementById('regStatus').textContent = 'Pending (submitted)';
+      alert('Registration submitted. Wait for admin approval.');
+    } catch (err) {
+      console.error('Registration submit error', err);
+      alert('Failed to submit registration: ' + (err.message || 'Unknown error'));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 
   /*******************************
    * Camera & QR scanning
