@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Scooty & Battery Masterlist</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 8px;
+      text-align: left;
+    }
+    select {
+      padding: 4px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="window.location.href='admin-dashboard.html'">⬅ Dashboard</button>
+    <span id="adminEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1> Scooty & Battery Masterlist </h1>
+    <p class="muted">View and manage state/status of assets. Changes apply immediately.</p>
+
+    <h2>Scooties</h2>
+    <table id="scootyTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>State</th>
+          <th>Status</th>
+          <th>Assigned To</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Batteries</h2>
+    <table id="batteryTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>State</th>
+          <th>Status</th>
+          <th>Assigned To</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    // Auth check
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "admin-signin.html";
+        return;
+      }
+      document.getElementById("adminEmail").innerText = "👤 " + user.email;
+
+      const doc = await db.collection("users").doc(user.email).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        alert("❌ Not an admin.");
+        window.location.href = "index.html";
+        return;
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut());
+
+    const scootyBody = document.querySelector("#scootyTable tbody");
+    const batteryBody = document.querySelector("#batteryTable tbody");
+
+    function renderTable(collection, tbody) {
+      db.collection(collection).onSnapshot(snapshot => {
+        tbody.innerHTML = "";
+        snapshot.forEach(doc => {
+          const d = doc.data();
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${doc.id}</td>
+            <td>
+              <select data-col="${collection}" data-id="${doc.id}" data-field="state">
+                <option value="active" ${d.state==="active"?"selected":""}>Active</option>
+                <option value="repair" ${d.state==="repair"?"selected":""}>Repair</option>
+                <option value="maintenance" ${d.state==="maintenance"?"selected":""}>Maintenance</option>
+                <option value="dead" ${d.state==="dead"?"selected":""}>Dead</option>
+              </select>
+            </td>
+            <td>
+              <select data-col="${collection}" data-id="${doc.id}" data-field="status">
+                <option value="returned" ${d.status==="returned"?"selected":""}>Returned</option>
+                <option value="assigned" ${d.status==="assigned"?"selected":""}>Assigned</option>
+              </select>
+            </td>
+            <td>${d.assignedTo || "-"}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    renderTable("scooties", scootyBody);
+    renderTable("batteries", batteryBody);
+
+    // Update on dropdown change
+    document.addEventListener("change", async e => {
+      if (e.target.tagName === "SELECT" && e.target.dataset.id) {
+        const col = e.target.dataset.col;
+        const id = e.target.dataset.id;
+        const field = e.target.dataset.field;
+        const value = e.target.value;
+        try {
+          await db.collection(col).doc(id).update({ [field]: value });
+          console.log(`Updated ${col}/${id} → ${field}: ${value}`);
+        } catch(err) {
+          console.error("Update failed", err);
+          alert("❌ Failed to update " + col);
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Rider Sign In</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="card">
+    <h1>Rider Sign In</h1>
+    <div class="muted">Sign in with Google or use your registered email</div>
+
+    <!-- Sign In Buttons -->
+    <div style="margin-bottom:16px;">
+      <button class="btn" id="googleSigninBtn">Sign In with Google</button>
+    </div>
+
+    <!-- Manual Sign In -->
+    <label>Email</label>
+    <input id="signinEmail" type="email" placeholder="Enter email"/>
+    <button class="btn" id="signinBtn">Sign In</button>
+
+    <button class="btn secondary" onclick="window.location.href='rider-signup.html'">New user? Sign Up</button>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Firebase v8 SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    const toast = msg => {
+      const t = document.getElementById("toast");
+      t.innerText = msg;
+      t.style.display = "block";
+      setTimeout(()=>t.style.display="none",3000);
+    };
+
+    // 🚪 Google Sign-In
+    document.getElementById('googleSigninBtn').addEventListener('click', async () => {
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const result = await firebase.auth().signInWithPopup(provider);
+        const user = result.user;
+        const email = user.email;
+
+        const docRef = db.collection('users').doc(email);
+        const snap = await docRef.get();
+
+        if (!snap.exists) {
+          toast("⚠️ No rider found. Please sign up first.");
+          window.location.href = "rider-signup.html";
+          return;
+        }
+
+        const data = snap.data() || {};
+        if (data.status === "approved") {
+          window.location.href = "scanner.html?email=" + encodeURIComponent(email);
+        } else if (data.status === "pending") {
+          toast("⏳ Your registration is still pending admin approval.");
+        } else if (data.status === "rejected") {
+          toast("❌ Your registration has been rejected. Contact admin.");
+        } else {
+          toast("⚠️ Unknown status. Please contact support.");
+        }
+
+      } catch (err) {
+        console.error(err);
+        toast("❌ Google Sign-In Error: " + err.message);
+      }
+    });
+
+    // 📝 Manual Sign-In
+    document.getElementById('signinBtn').addEventListener('click', async () => {
+      try {
+        const email = (document.getElementById('signinEmail').value || '').trim();
+        if (!email) {
+          toast("⚠️ Please enter your email.");
+          return;
+        }
+
+        const docRef = db.collection('users').doc(email);
+        const snap = await docRef.get();
+
+        if (!snap.exists) {
+          toast("⚠️ No rider found with this email. Please sign up first.");
+          window.location.href = "rider-signup.html";
+          return;
+        }
+
+        const data = snap.data() || {};
+        if (data.status === "approved") {
+          window.location.href = "scanner.html?email=" + encodeURIComponent(email);
+        } else if (data.status === "pending") {
+          toast("⏳ Your registration is still pending admin approval.");
+        } else if (data.status === "rejected") {
+          toast("❌ Your registration has been rejected. Contact admin.");
+        } else {
+          toast("⚠️ Unknown status. Please contact support.");
+        }
+
+      } catch (err) {
+        console.error(err);
+        toast("❌ Sign-in error: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+

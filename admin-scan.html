@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Admin Scan</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="window.location.href='admin-dashboard.html'">⬅ Dashboard</button>
+    <span id="adminEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1>Admin Scan</h1>
+    <p class="muted">Scan a Scooty or Battery QR to update its state.</p>
+
+    <!-- QR Scanner -->
+<video id="video" width="300" height="200" style="border:1px solid #00eaff;" autoplay></video>
+<canvas id="canvas" width="300" height="200" style="display:none"></canvas>
+<button id="startCam" class="btn">Start Camera</button>
+<button id="stopCam" class="btn" style="display:none">Stop Camera</button>
+<p id="scanResult" class="muted"></p>
+
+
+    <!-- State Selector -->
+    <div id="stateSection" style="display:none;">
+      <label for="newState">Change State:</label>
+      <select id="newState">
+        <option value="active">Active</option>
+        <option value="dead">Dead</option>
+        <option value="repair">Repair</option>
+        <option value="maintenance">Maintenance</option>
+      </select>
+      <button class="btn" id="submitBtn">Submit</button>
+    </div>
+
+    <!-- Logs -->
+    <h2>Recent Admin Logs</h2>
+    <ul id="logsList"></ul>
+  </div>
+
+  <!-- QR Scanner library -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    let scannedId = null;
+    let scannedType = null;
+
+    // auth check
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "admin-signin.html";
+        return;
+      }
+      document.getElementById("adminEmail").innerText = "👤 " + user.email;
+
+      const doc = await db.collection("users").doc(user.email).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        alert("❌ Not an admin.");
+        window.location.href = "index.html";
+        return;
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut());
+
+    // QR Scanner setup
+    function onScanSuccess(decodedText) {
+      scannedId = decodedText.trim();
+      document.getElementById("scanResult").innerText = "✅ Scanned: " + scannedId;
+
+      // detect type (scooty or battery)
+      if (scannedId.startsWith("S")) {
+        scannedType = "scooties";
+      } else if (scannedId.startsWith("B")) {
+        scannedType = "batteries";
+      } else {
+        alert("❌ Invalid QR ID");
+        return;
+      }
+
+      checkEligibility();
+    }
+
+    function checkEligibility(){
+      db.collection(scannedType).doc(scannedId).get().then(doc=>{
+        if(!doc.exists){
+          alert("❌ ID not found in masterlist.");
+          return;
+        }
+        const data = doc.data();
+        if(data.status !== "returned"){
+          alert("❌ Item not eligible (must have status = returned).");
+          return;
+        }
+        document.getElementById("stateSection").style.display="block";
+      });
+    }
+    let stream = null;
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let scanning = false;
+
+document.getElementById("startCam").addEventListener("click", async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    video.srcObject = stream;
+    scanning = true;
+    scanFrame();
+    document.getElementById("startCam").style.display="none";
+    document.getElementById("stopCam").style.display="inline-block";
+  } catch (err) {
+    alert("Camera access denied or not available.");
+    console.error(err);
+  }
+});
+
+document.getElementById("stopCam").addEventListener("click", () => {
+  if(stream){
+    stream.getTracks().forEach(track => track.stop());
+  }
+  scanning = false;
+  document.getElementById("startCam").style.display="inline-block";
+  document.getElementById("stopCam").style.display="none";
+});
+
+function scanFrame(){
+  if(!scanning) return;
+  if(video.readyState === video.HAVE_ENOUGH_DATA){
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const code = jsQR(imageData.data,imageData.width,imageData.height);
+    if(code){
+      onScanSuccess(code.data);
+      scanning = false;
+      document.getElementById("stopCam").click(); // auto stop after scan
+    }
+  }
+  requestAnimationFrame(scanFrame);
+}
+
+
+
+    // Submit new state
+    document.getElementById("submitBtn").addEventListener("click", async () => {
+      const newState = document.getElementById("newState").value;
+      if(!scannedId || !scannedType){
+        alert("❌ No item scanned.");
+        return;
+      }
+
+      await db.collection(scannedType).doc(scannedId).update({
+        state: newState,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      await db.collection("logs").add({
+        type: scannedType,
+        itemId: scannedId,
+        action: "state-change",
+        newState,
+        admin: auth.currentUser.email,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      alert("✅ State updated!");
+      document.getElementById("stateSection").style.display="none";
+      loadLogs();
+    });
+
+    // Load recent logs
+    function loadLogs(){
+      db.collection("logs")
+        .where("action","==","state-change")
+        .orderBy("timestamp","desc")
+        .limit(10)
+        .onSnapshot(sn=>{
+          const list = document.getElementById("logsList");
+          list.innerHTML="";
+          sn.forEach(doc=>{
+            const d = doc.data();
+            const li = document.createElement("li");
+            li.textContent = `${d.timestamp?.toDate().toLocaleString()} — ${d.type} ${d.itemId} → ${d.newState} (by ${d.admin})`;
+            list.appendChild(li);
+          });
+        });
+    }
+    loadLogs();
+  </script>
+</body>
+</html>

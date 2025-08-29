@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Admin Sign In</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="card">
+    <h1>Admin Sign In</h1>
+    <div class="muted">Only admins can sign in here.</div>
+
+    <button class="btn" id="googleAdminSignin">Sign in with Google</button>
+    <button class="btn secondary" onclick="window.location.href='index.html'">Back</button>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    const provider = new firebase.auth.GoogleAuthProvider();
+
+    document.getElementById("googleAdminSignin").addEventListener("click", async () => {
+      try {
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+
+        const docRef = db.collection("users").doc(user.email);
+        const snap = await docRef.get();
+
+        if (!snap.exists) {
+          alert("No user record found. Contact system admin.");
+          return;
+        }
+
+        const data = snap.data();
+        if (data.role === "admin") {
+          window.location.href = "admin-dashboard.html?email=" + encodeURIComponent(user.email);
+        } else {
+          alert("❌ Access denied. You are not an admin.");
+          await auth.signOut();
+        }
+
+      } catch (err) {
+        console.error("Admin sign in failed:", err);
+        alert("Sign in failed: " + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

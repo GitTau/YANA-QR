@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="navbar">
+    <span id="adminEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1>Admin Dashboard</h1>
+    <p class="muted">Choose an action:</p>
+
+    <div class="menu">
+     <button class="btn" onclick="window.location.href='admin-scan.html'">Admin Scan</button>
+      <button class="btn" onclick="window.location.href='pending-approval.html'">Pending Rider Approval</button>
+<button class="btn" onclick="window.location.href='user-management.html'">User Management</button>
+<button class="btn" onclick="window.location.href='masterlist.html'">Scooty/Battery Masterlist</button>
+<button class="btn" onclick="window.location.href='logs-viewer.html'">Logs Viewer</button>
+<button class="btn" onclick="window.location.href='issues.html'">Issues</button>
+      <button class="btn" onclick="window.location.href='seed.html'">Seed Master Data</button>
+
+
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    // check if admin
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "admin-signin.html";
+        return;
+      }
+      document.getElementById("adminEmail").innerText = "👤 " + user.email;
+
+      const doc = await db.collection("users").doc(user.email).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        alert("❌ Not an admin.");
+        window.location.href = "index.html";
+        return;
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut());
+
+    function go(page){
+      window.location.href = page;
+    }
+  </script>
+</body>
+</html>

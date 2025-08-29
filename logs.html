@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Logs Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 8px;
+      text-align: left;
+      font-size: 14px;
+    }
+    .filter {
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="window.location.href='admin-dashboard.html'">⬅ Dashboard</button>
+    <span id="adminEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1> Logs Viewer </h1>
+    <p class="muted">See both Rider Scans and Admin Actions.</p>
+
+    <div class="filter">
+      <label>Filter: </label>
+      <select id="logFilter">
+        <option value="all">All</option>
+        <option value="rider">Rider Logs</option>
+        <option value="admin">Admin Logs</option>
+      </select>
+    </div>
+
+    <table id="logsTable">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>User</th>
+          <th>Type</th>
+          <th>Action</th>
+          <th>Item ID</th>
+          <th>Extra Info</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    const tbody = document.querySelector("#logsTable tbody");
+
+    // Auth check
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "admin-signin.html";
+        return;
+      }
+      document.getElementById("adminEmail").innerText = "👤 " + user.email;
+
+      const doc = await db.collection("users").doc(user.email).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        alert("❌ Not an admin.");
+        window.location.href = "index.html";
+        return;
+      }
+
+      loadLogs();
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut());
+
+    function loadLogs() {
+      db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
+        renderLogs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+    }
+
+    function renderLogs(logs) {
+      const filter = document.getElementById("logFilter").value;
+      tbody.innerHTML = "";
+
+      logs.forEach(log => {
+        if (filter !== "all" && log.type !== filter) return;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${log.timestamp?.toDate().toLocaleString() || "-"}</td>
+          <td>${log.user || "-"}</td>
+          <td>${log.type}</td>
+          <td>${log.action}</td>
+          <td>${log.itemId || "-"}</td>
+          <td>${log.extra || "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("logFilter").addEventListener("change", () => loadLogs());
+  </script>
+</body>
+</html>

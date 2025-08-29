@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Pending Rider Approval</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 8px;
+      text-align: left;
+    }
+    select {
+      padding: 4px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="window.location.href='admin-dashboard.html'">⬅ Dashboard</button>
+    <span id="adminEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1>Pending Rider Approval</h1>
+    <p class="muted">Review riders awaiting approval. Choose Approve, Reject, or No Action.</p>
+
+    <table id="ridersTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Vendor</th>
+          <th>Business Partners</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <button class="btn" id="submitBtn">Submit Changes</button>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <script>
+    // Admin auth check
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "admin-signin.html";
+        return;
+      }
+      document.getElementById("adminEmail").innerText = "👤 " + user.email;
+
+      const doc = await db.collection("users").doc(user.email).get();
+      if (!doc.exists || doc.data().role !== "admin") {
+        alert("❌ Not an admin.");
+        window.location.href = "index.html";
+        return;
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => auth.signOut());
+
+    // Load pending riders
+    const tbody = document.querySelector("#ridersTable tbody");
+
+    function loadPendingRiders() {
+      db.collection("users")
+        .where("status", "==", "pending")
+        .onSnapshot(snapshot => {
+          tbody.innerHTML = "";
+          snapshot.forEach(doc => {
+            const d = doc.data();
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${d.name || ""}</td>
+              <td>${d.phone || ""}</td>
+              <td>${d.email || doc.id}</td>
+              <td>${d.vendor || ""}</td>
+              <td>${(d.partners || []).join(", ")}</td>
+              <td>
+                <select data-id="${doc.id}">
+                  <option value="none" selected>No Action</option>
+                  <option value="approved">Approve</option>
+                  <option value="rejected">Reject</option>
+                </select>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+        });
+    }
+    loadPendingRiders();
+
+    // Submit bulk actions
+    document.getElementById("submitBtn").addEventListener("click", async () => {
+      const updates = [];
+      document.querySelectorAll("select[data-id]").forEach(sel => {
+        const action = sel.value;
+        const email = sel.dataset.id;
+        if (action !== "none") {
+          updates.push(db.collection("users").doc(email).update({ status: action }));
+        }
+      });
+      if (updates.length === 0) {
+        alert("ℹ No actions selected.");
+        return;
+      }
+      await Promise.all(updates);
+      alert("✅ Changes applied!");
+    });
+  </script>
+</body>
+</html>

@@ -3,165 +3,241 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>YANA — Scanner</title>
+  <title>YANA — Rider QR Scanner</title>
   <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="container">
-    <h1>QR Scanner</h1>
-    <p class="muted">Scan scooters and batteries to assign or return them.</p>
 
-    <div class="panel">
-      <h2>Camera</h2>
-      <video id="preview" autoplay playsinline></video>
-      <p id="status">Initializing camera...</p>
-      <button class="btn secondary" id="signOutBtn">Sign Out</button>
-    </div>
+  <!-- QR Scanner library -->
+<script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
 
-    <div class="panel" id="assignments">
-      <h2>Current Assignments</h2>
-      <p>Scooter: <span id="currentScooter">None</span></p>
-      <p>Battery: <span id="currentBattery">None</span></p>
-    </div>
-
-    <div class="panel">
-      <h2>Logs</h2>
-      <div id="logs"></div>
-    </div>
-  </div>
-
-  <div id="toast"></div>
-
-  <!-- Firebase + ZXing -->
+  <!-- Firebase v8 SDKs -->
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- Your Firebase config (make sure this file exists in same folder) -->
   <script src="firebase-config.js"></script>
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Rider QR Scanner</h1>
+    <p class="muted">Scan Scooty or Battery QR to Assign / Return</p>
+
+    <!-- Rider Info -->
+    <div id="riderInfo"></div>
+
+    <!-- Scanner -->
+<video id="video" playsinline></video>
+
+    <button id="startCam" class="btn">Start Camera</button>
+    <button id="stopCam" class="btn" style="display:none">Stop Camera</button>
+
+    <!-- Current assignment -->
+    <div class="status">
+      <h2>Current Assignment</h2>
+      <p>Scooty: <span id="currentScooty">None</span></p>
+      <p>Battery: <span id="currentBattery">None</span></p>
+    </div>
+
+    <!-- Location selector (only for returns) -->
+    <div id="locationSection" style="display:none;">
+      <label>Select Return Location</label>
+      <select id="returnLocation">
+        <option value="">-- Select Location --</option>
+        <option value="Hub 1">Hub 1</option>
+        <option value="Hub 2">Hub 2</option>
+        <option value="Hub 3">Hub 3</option>
+      </select>
+    </div>
+
+    <!-- Logs -->
+    <div class="logs">
+      <h2>Scan Logs</h2>
+      <ul id="logsList"></ul>
+    </div>
+  </div>
 
   <script>
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-    const toast = msg => { const t=document.getElementById("toast");t.innerText=msg;t.style.display="block";setTimeout(()=>t.style.display="none",3000);};
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email");
+    const riderInfoDiv = document.getElementById("riderInfo");
 
-    let currentUser = null;
-    let lastScan = "";
+    let currentScooty = null;
+    let currentBattery = null;
 
-    // Sign out
-    document.getElementById("signOutBtn").addEventListener("click", () => {
-      auth.signOut().then(()=>window.location.href="homepage.html");
-    });
+    if(!email){
+      alert("Not signed in!");
+      window.location.href="rider-signin.html";
+    }
 
-    // Auth state
-    auth.onAuthStateChanged(async user=>{
-      if(!user){
+    // Load rider info
+    async function loadRider(){
+      const doc = await db.collection("users").doc(email).get();
+      if(!doc.exists){
+        alert("Rider not found.");
+        window.location.href="rider-signup.html";
+      }
+      const data = doc.data();
+      riderInfoDiv.innerHTML = `<b>${data.name}</b> (${email}) — Status: ${data.status}`;
+      if(data.status !== "approved"){
+        alert("Your account is not approved.");
         window.location.href="rider-signin.html";
-        return;
-      }
-      currentUser = user;
-      const snap = await db.collection("users").doc(user.email).get();
-      if(!snap.exists || snap.data().status!=="approved"){
-        toast("You are not approved to use the scanner.");
-        auth.signOut();
-        return;
-      }
-      setupRealtimeAssignments(user.email);
-      startScanner();
-      loadLogs(user.email);
-    });
-
-    // Realtime updates of scooter/battery
-    function setupRealtimeAssignments(email){
-      db.collection("users").doc(email).onSnapshot(doc=>{
-        const data=doc.data()||{};
-        document.getElementById("currentScooter").innerText = data.scooterId||"None";
-        document.getElementById("currentBattery").innerText = data.batteryId||"None";
-      });
-    }
-
-    // Load last 10 logs
-    function loadLogs(email){
-      db.collection("logs").where("email","==",email)
-        .orderBy("timestamp","desc").limit(10)
-        .onSnapshot(snap=>{
-          const logs=document.getElementById("logs");
-          logs.innerHTML="";
-          snap.forEach(doc=>{
-            const d=doc.data();
-            const div=document.createElement("div");
-            div.className="log";
-            div.innerText=`[${d.timestamp?.toDate().toLocaleString()||""}] ${d.type} ${d.deviceId} → ${d.action}`;
-            logs.appendChild(div);
-          });
-        });
-    }
-
-    // Scanner
-    function startScanner(){
-      const codeReader = new ZXing.BrowserQRCodeReader();
-      codeReader.decodeFromVideoDevice(null,"preview",(result,err)=>{
-        if(result){
-          const code=result.text.trim();
-          if(code!==lastScan){ lastScan=code; handleScan(code); }
-        }
-      });
-    }
-
-    // Handle QR scan
-    async function handleScan(code){
-      if(!currentUser) return;
-      const email=currentUser.email;
-      const ref=db.collection("users").doc(email);
-      const snap=await ref.get();
-      const data=snap.data()||{};
-      const isScooter=code.startsWith("SCOOTER");
-      const isBattery=code.startsWith("BATTERY");
-
-      if(isScooter){
-        if(data.scooterId && data.scooterId!==code){
-          toast("Return your current scooter first.");
-          return;
-        }
-        if(data.scooterId===code){
-          await ref.update({scooterId:firebase.firestore.FieldValue.delete()});
-          await logAction(email,code,"scooter","returned");
-          toast("Scooter returned.");
-        } else {
-          await ref.update({scooterId:code});
-          await logAction(email,code,"scooter","assigned");
-          toast("Scooter assigned.");
-        }
-      } else if(isBattery){
-        if(!data.scooterId){
-          toast("Assign a scooter before taking a battery.");
-          return;
-        }
-        if(data.batteryId && data.batteryId!==code){
-          toast("Return your current battery first.");
-          return;
-        }
-        if(data.batteryId===code){
-          await ref.update({batteryId:firebase.firestore.FieldValue.delete()});
-          await logAction(email,code,"battery","returned");
-          toast("Battery returned.");
-        } else {
-          await ref.update({batteryId:code});
-          await logAction(email,code,"battery","assigned");
-          toast("Battery assigned.");
-        }
-      } else {
-        toast("Invalid QR code.");
       }
     }
 
-    // Log action
-    async function logAction(email,deviceId,type,action){
+    // Update UI
+    function updateAssignmentUI(){
+      document.getElementById("currentScooty").innerText = currentScooty || "None";
+      document.getElementById("currentBattery").innerText = currentBattery || "None";
+    }
+
+    // Log helper
+    async function logAction(action, itemId, itemType, location=""){
       await db.collection("logs").add({
-        email, deviceId, type, action,
+        email, action, itemId, itemType, location,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
+      const li = document.createElement("li");
+      li.textContent = `${new Date().toLocaleString()} — ${action} ${itemType} ${itemId} ${location}`;
+      document.getElementById("logsList").prepend(li);
     }
+
+    // Handle scan
+    async function handleScan(qrMessage){
+      const id = qrMessage.trim();
+      let type = null, ref = null;
+
+      if((await db.collection("scooty_master").doc(id).get()).exists){
+  type = "scooty"; ref = db.collection("scooty_master").doc(id);
+} else if((await db.collection("battery_master").doc(id).get()).exists){
+  type = "battery"; ref = db.collection("battery_master").doc(id);
+}
+ else {
+        alert("Unknown QR code: " + id);
+        return;
+      }
+
+      const snap = await ref.get();
+      const data = snap.data();
+    if (data.state !== "active") {
+  alert(`${type} ${id} is not active.`);
+  return;
+}
+
+
+      if(data.status === "returned"){
+        if(type === "scooty"){
+          if(currentScooty){ alert("You already have a scooty assigned."); return; }
+          currentScooty = id;
+          await ref.update({status:"assigned", assignedTo:email});
+          updateAssignmentUI();
+          await logAction("assigned", id, type);
+          alert(`Scooty ${id} assigned. Now scan a battery.`);
+        }
+        else if(type === "battery"){
+          if(!currentScooty){ alert("Scan a scooty first before assigning a battery."); return; }
+          if(currentBattery){ alert("You already have a battery assigned."); return; }
+          currentBattery = id;
+          await ref.update({status:"assigned", assignedTo:email});
+          updateAssignmentUI();
+          await logAction("assigned", id, type);
+          alert(`Battery ${id} assigned.`);
+        }
+      }
+      else if(data.status === "assigned" && data.assignedTo === email){
+        document.getElementById("locationSection").style.display = "block";
+        const location = document.getElementById("returnLocation").value;
+        if(!location){ alert("Select return location before returning."); return; }
+
+        if(type === "battery"){
+          await ref.update({status:"returned", assignedTo:null, location});
+          currentBattery = null;
+          updateAssignmentUI();
+          await logAction("returned", id, type, location);
+          alert(`Battery ${id} returned.`);
+        }
+        else if(type === "scooty"){
+          if(currentBattery){ alert("Return the battery first before returning the scooty."); return; }
+          await ref.update({status:"returned", assignedTo:null, location});
+          currentScooty = null;
+          updateAssignmentUI();
+          await logAction("returned", id, type, location);
+          alert(`Scooty ${id} returned.`);
+        }
+      }
+      else {
+        alert(`${type} ${id} is not eligible for this operation.`);
+      }
+    }
+
+    // Camera start/stop
+    let stream = null;
+let scanning = false;
+let scanInterval = null;
+let lastRawResult = null;
+
+async function startCamera() {
+  try {
+    const video = document.getElementById("video");
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
+    scanLoop();
+    document.getElementById("startCam").style.display = "none";
+    document.getElementById("stopCam").style.display = "inline-block";
+  } catch (err) {
+    console.error("Camera error", err);
+    alert("Camera access denied or not available");
+  }
+}
+
+function stopCamera() {
+  scanning = false;
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  if (scanInterval) {
+    clearInterval(scanInterval);
+    scanInterval = null;
+  }
+  document.getElementById("startCam").style.display = "inline-block";
+  document.getElementById("stopCam").style.display = "none";
+}
+
+function scanLoop() {
+  const video = document.getElementById("video");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  scanInterval = setInterval(() => {
+    if (!scanning || !video.videoWidth) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+    if (code && code.data && code.data !== lastRawResult) {
+      lastRawResult = code.data;
+      console.log("Scanned QR:", code.data);
+      handleScan(code.data); // <-- reuse your existing handleScan()
+    }
+  }, 400);
+}
+
+document.getElementById("startCam").addEventListener("click", startCamera);
+document.getElementById("stopCam").addEventListener("click", stopCamera);
+
+    document.getElementById("startCam").addEventListener("click", startScanner);
+    document.getElementById("stopCam").addEventListener("click", stopScanner);
+
+    // Run
+    loadRider();
   </script>
 </body>
 </html>
+
+
+
 

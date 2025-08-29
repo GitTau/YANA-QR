@@ -1,0 +1,163 @@
+:root {
+  --bg: #0a0f12;
+  --bg-gradient: linear-gradient(135deg, #0a0f12, #141a1f 60%);
+  --card: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.08);
+  --action: #00eaff;
+  --muted: #9aa6ac;
+  --text: #eaf4f8;
+  --radius: 14px;
+  --transition: 0.3s ease;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+
+html, body {
+  background: var(--bg-gradient);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+h1 { font-size: 32px; letter-spacing: 0.5px; }
+h2 { font-size: 24px; }
+h3 { font-size: 18px; }
+
+p, span {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* Layout helpers */
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  text-align: center;
+  padding: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+@media(max-width: 960px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+/* Cards */
+.card {
+  background: var(--card);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(0, 234, 255, 0.15);
+}
+
+/* Buttons */
+.btn {
+  background: var(--action);
+  color: #001;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition);
+  width: fit-content;
+  min-width: 140px;
+  text-align: center;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 234, 255, 0.3);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 234, 255, 0.15);
+}
+
+/* Secondary buttons */
+.btn.secondary {
+  background: transparent;
+  color: var(--action);
+  border: 1px solid var(--action);
+  box-shadow: none;
+}
+
+.btn.secondary:hover {
+  background: rgba(0, 234, 255, 0.1);
+}
+
+/* Inputs & Selects */
+input, select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border var(--transition), background var(--transition);
+  width: 100%;
+}
+
+input:focus, select:focus {
+  border-color: var(--action);
+  background: rgba(0, 234, 255, 0.1);
+}
+
+/* Status tags */
+.status {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+/* Logs list */
+.logs, .log-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin-top: 10px;
+  padding-right: 6px;
+}
+
+.log-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 8px;
+  transition: background var(--transition);
+}
+
+.log-item:hover {
+  background: rgba(0, 234, 255, 0.06);
+}
+
