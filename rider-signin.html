@@ -59,7 +59,7 @@
 
         const data = snap.data() || {};
         if (data.status === "approved") {
-          window.location.href = "scanner.html?email=" + encodeURIComponent(email);
+          window.location.href = "rider-dashboard.html?email=" + encodeURIComponent(email);
         } else if (data.status === "pending") {
           toast("⏳ Your registration is still pending admin approval.");
         } else if (data.status === "rejected") {
@@ -94,7 +94,7 @@
 
         const data = snap.data() || {};
         if (data.status === "approved") {
-          window.location.href = "scanner.html?email=" + encodeURIComponent(email);
+          window.location.href = "rider-dashboard.html?email=" + encodeURIComponent(email);
         } else if (data.status === "pending") {
           toast("⏳ Your registration is still pending admin approval.");
         } else if (data.status === "rejected") {
@@ -111,6 +111,3 @@
   </script>
 </body>
 </html>
-
-
-

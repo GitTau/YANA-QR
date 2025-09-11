@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Rider Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase v8 SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+  <!-- Your Firebase config -->
+  <script src="firebase-config.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>🚴 Rider Dashboard</h1>
+
+    <!-- Rider Info -->
+    <div id="riderInfo" class="muted"></div>
+
+    <!-- Current assignment -->
+    <div class="status">
+      <h2>Current Assignment</h2>
+      <p>Scooty: <span id="currentScooty">Loading...</span></p>
+      <p>Battery: <span id="currentBattery">Loading...</span></p>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button class="btn" id="scanBtn">📷 Scan QR</button>
+      <button class="btn" id="logsBtn">📜 Rider Logs</button>
+      <button class="btn" id="issueBtn">⚠️ Raise Issue</button>
+      <button class="btn secondary" id="logoutBtn">🚪 Logout</button>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email");
+    const riderInfoDiv = document.getElementById("riderInfo");
+
+    let currentScooty = null;
+    let currentBattery = null;
+
+    if(!email){
+      alert("Not signed in!");
+      window.location.href="rider-signin.html";
+    }
+
+    // Load rider info
+    async function loadRider(){
+      const doc = await db.collection("users").doc(email).get();
+      if(!doc.exists){
+        alert("Rider not found.");
+        window.location.href="rider-signup.html";
+        return;
+      }
+      const data = doc.data();
+      riderInfoDiv.innerHTML = `<b>${data.name}</b> (${email}) — Status: ${data.status}`;
+      if(data.status !== "approved"){
+        alert("Your account is not approved.");
+        window.location.href="rider-signin.html";
+        return;
+      }
+      loadMyAssignments();
+    }
+
+    // Load current assignments from master collections
+    async function loadMyAssignments(){
+      currentScooty = null;
+      currentBattery = null;
+
+      const s = await db.collection("scooty_master")
+        .where("assignedTo", "==", email)
+        .where("status", "==", "assigned")
+        .limit(1).get();
+      s.forEach(d => currentScooty = d.id);
+
+      const b = await db.collection("battery_master")
+        .where("assignedTo", "==", email)
+        .where("status", "==", "assigned")
+        .limit(1).get();
+      b.forEach(d => currentBattery = d.id);
+
+      document.getElementById("currentScooty").innerText = currentScooty || "None";
+      document.getElementById("currentBattery").innerText = currentBattery || "None";
+    }
+
+    // Button actions
+    document.getElementById("scanBtn").addEventListener("click", () => {
+      window.location.href = `scanner.html?email=${email}`;
+    });
+    document.getElementById("logsBtn").addEventListener("click", () => {
+      window.location.href = `rider-logs.html?email=${email}`;
+    });
+    document.getElementById("issueBtn").addEventListener("click", () => {
+      window.location.href = `issue.html?email=${email}`;
+    });
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      firebase.auth().signOut().then(()=>{
+        window.location.href="rider-signin.html";
+      });
+    });
+
+    // Run
+    loadRider();
+  </script>
+</body>
+</html>

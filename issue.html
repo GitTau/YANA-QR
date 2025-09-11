@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Raise Issue</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="history.back()">⬅ Back</button>
+    <span id="riderEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1>⚠️ Raise an Issue</h1>
+    <form id="issueForm">
+      <label for="assetSelect">Select Assigned Asset:</label>
+      <select id="assetSelect" required>
+        <option value="">-- Select --</option>
+      </select>
+
+      <label for="issueText">Describe the issue:</label>
+      <textarea id="issueText" rows="4" placeholder="Describe your issue..." required></textarea>
+
+      <button class="btn" type="submit">Submit Issue</button>
+    </form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email");
+    if (!email) {
+      alert("Not signed in!");
+      window.location.href = "rider-signin.html";
+    }
+
+    document.getElementById("riderEmail").innerText = "👤 " + email;
+
+    // Logout
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      window.location.href = "rider-signin.html";
+    });
+
+    const assetSelect = document.getElementById("assetSelect");
+
+    async function loadAssignments() {
+      // Load current assignments
+      let scooty = null, battery = null;
+
+      const s = await db.collection("scooty_master")
+        .where("assignedTo", "==", email)
+        .where("status", "==", "assigned")
+        .limit(1).get();
+      s.forEach(d => scooty = d.id);
+
+      const b = await db.collection("battery_master")
+        .where("assignedTo", "==", email)
+        .where("status", "==", "assigned")
+        .limit(1).get();
+      b.forEach(d => battery = d.id);
+
+      if (scooty) {
+        const opt = document.createElement("option");
+        opt.value = scooty;
+        opt.textContent = "Scooty: " + scooty;
+        assetSelect.appendChild(opt);
+      }
+
+      if (battery) {
+        const opt = document.createElement("option");
+        opt.value = battery;
+        opt.textContent = "Battery: " + battery;
+        assetSelect.appendChild(opt);
+      }
+    }
+
+    document.getElementById("issueForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const assetId = assetSelect.value;
+      const description = document.getElementById("issueText").value.trim();
+
+      if (!assetId || !description) {
+        alert("Please select an asset and enter a description.");
+        return;
+      }
+
+      await db.collection("issues").add({
+        email,
+        assetId,
+        description,
+        status: "open",
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      alert("✅ Issue submitted successfully!");
+      document.getElementById("issueForm").reset();
+    });
+
+    loadAssignments();
+  </script>
+</body>
+</html>

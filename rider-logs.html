@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>YANA — Rider Logs</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="firebase-config.js"></script>
+</head>
+<body>
+  <div class="navbar">
+    <button class="btn secondary" onclick="history.back()">⬅ Back</button>
+    <span id="riderEmail"></span>
+    <button class="btn secondary" id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="container">
+    <h1>📜 Rider Logs</h1>
+    <ul id="logsList"></ul>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email");
+    if (!email) {
+      alert("Not signed in!");
+      window.location.href = "rider-signin.html";
+    }
+
+    document.getElementById("riderEmail").innerText = "👤 " + email;
+
+    // Logout
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      window.location.href = "rider-signin.html";
+    });
+
+    // Load logs
+    function loadLogs() {
+      db.collection("logs")
+        .where("email", "==", email)
+        .orderBy("timestamp", "desc")
+        .limit(50)
+        .onSnapshot(snapshot => {
+          const list = document.getElementById("logsList");
+          list.innerHTML = "";
+          snapshot.forEach(doc => {
+            const d = doc.data();
+            const li = document.createElement("li");
+            li.textContent = `${d.timestamp?.toDate().toLocaleString()} — ${d.action} ${d.itemType} ${d.itemId} ${d.location || ""}`;
+            list.appendChild(li);
+          });
+        });
+    }
+
+    loadLogs();
+  </script>
+</body>
+</html>
